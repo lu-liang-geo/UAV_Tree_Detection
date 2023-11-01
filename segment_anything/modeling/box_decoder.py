@@ -78,7 +78,7 @@ class BoxDecoder(nn.Module):
         #multimask_output: bool,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Predict masks given image and prompt embeddings.
+        Predict boxes given image and prompt embeddings.
 
         Arguments:
           image_embeddings (torch.Tensor): the embeddings from the image encoder
@@ -89,8 +89,8 @@ class BoxDecoder(nn.Module):
             mask.
 
         Returns:
-          torch.Tensor: batched predicted masks
-          torch.Tensor: batched predictions of mask quality
+          torch.Tensor: batched predicted boxes
+          torch.Tensor: batched predictions of box quality
         """
         boxes, iou_pred = self.predict_boxes(
             image_embeddings=image_embeddings,
@@ -98,11 +98,6 @@ class BoxDecoder(nn.Module):
             sparse_prompt_embeddings=sparse_prompt_embeddings,
             dense_prompt_embeddings=dense_prompt_embeddings,
         )
-
-        # Select the correct mask or masks for output
-        box_slice = slice(1, None)
-        boxes = boxes[:, box_slice, :, :]
-        iou_pred = iou_pred[:, box_slice]
 
         # Prepare output
         return boxes, iou_pred
@@ -114,26 +109,26 @@ class BoxDecoder(nn.Module):
         sparse_prompt_embeddings: torch.Tensor,
         dense_prompt_embeddings: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Predicts masks. See 'forward' for more details."""
+        """Predicts boxes. See 'forward' for more details."""
         # Concatenate output tokens
         output_tokens = torch.cat([self.iou_token.weight, self.box_tokens.weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
         tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
 
-        # Expand per-image data in batch direction to be per-mask
+        # Expand per-image data in batch direction to be per-box
         src = torch.repeat_interleave(image_embeddings, tokens.shape[0], dim=0)
         src = src + dense_prompt_embeddings
         pos_src = torch.repeat_interleave(image_pe, tokens.shape[0], dim=0)
         b, c, h, w = src.shape
 
         # Run the transformer
-        hs, src = self.transformer(src, pos_src, tokens)
+        hs, src2 = self.transformer(src, pos_src, tokens)
         iou_token_out = hs[:, 0, :]
         box_tokens_out = hs[:, 1 : (1 + self.num_box_tokens), :]
 
         # Upscale box embeddings and predict boxes using the box tokens
-        src = src.transpose(1, 2).view(b, c, h, w)
-        upscaled_embedding = self.output_upscaling(src)
+        src3 = src2.transpose(1, 2).view(b, c, h, w)
+        upscaled_embedding = self.output_upscaling(src3)
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_box_tokens):
             hyper_in_list.append(self.output_hypernetworks_mlps[i](box_tokens_out[:, i, :]))
@@ -141,10 +136,10 @@ class BoxDecoder(nn.Module):
         b, c, h, w = upscaled_embedding.shape
         boxes = (hyper_in @ upscaled_embedding.view(b, c, h * w)).view(b, -1, h, w)
 
-        # Generate mask quality predictions
+        # Generate box quality predictions
         iou_pred = self.iou_prediction_head(iou_token_out)
 
-        return boxes, iou_pred
+        return boxes, iou_pred, src, src2, src3, upscaled_embedding, hyper_in
 
 
 # Lightly adapted from
