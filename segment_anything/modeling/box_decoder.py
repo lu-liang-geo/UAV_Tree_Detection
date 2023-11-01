@@ -20,7 +20,8 @@ class BoxDecoder(nn.Module):
         transformer_dim: int,
         transformer: nn.Module,
         num_boxes: int = 100,
-        activation: Type[nn.Module] = nn.GELU,
+        box_head_depth: int = 3,
+        box_head_hidden_dim: int = 256,
         iou_head_depth: int = 3,
         iou_head_hidden_dim: int = 256,
     ) -> None:
@@ -34,8 +35,6 @@ class BoxDecoder(nn.Module):
           transformer (nn.Module): the transformer used to predict boxes
           num_boxes (int): the number of boxes to predict within a region
             of interest
-          activation (nn.Module): the type of activation to use when
-            upscaling boxes (not sure if this is necessary)
           iou_head_depth (int): the depth of the MLP used to predict
             box quality
           iou_head_hidden_dim (int): the hidden dimension of the MLP
@@ -51,20 +50,8 @@ class BoxDecoder(nn.Module):
         self.num_box_tokens = num_boxes
         self.box_tokens = nn.Embedding(self.num_box_tokens, transformer_dim)
 
-        self.output_upscaling = nn.Sequential(
-            nn.ConvTranspose2d(transformer_dim, transformer_dim // 4, kernel_size=2, stride=2),
-            LayerNorm2d(transformer_dim // 4),
-            activation(),
-            nn.ConvTranspose2d(transformer_dim // 4, transformer_dim // 8, kernel_size=2, stride=2),
-            activation(),
-        )
-        self.output_hypernetworks_mlps = nn.ModuleList(
-            [
-                MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3)
-                for i in range(self.num_box_tokens)
-            ]
-        )
-
+        self.box_prediction_head = MLP(
+            transformer_dim, box_head_hidden_dim, 4, box_head_depth, sigmoid_output=True)
         self.iou_prediction_head = MLP(
             transformer_dim, iou_head_hidden_dim, self.num_box_tokens, iou_head_depth
         )
@@ -75,7 +62,6 @@ class BoxDecoder(nn.Module):
         image_pe: torch.Tensor,
         sparse_prompt_embeddings: torch.Tensor,
         dense_prompt_embeddings: torch.Tensor,
-        #multimask_output: bool,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Predict boxes given image and prompt embeddings.
@@ -122,24 +108,17 @@ class BoxDecoder(nn.Module):
         b, c, h, w = src.shape
 
         # Run the transformer
-        hs, src2 = self.transformer(src, pos_src, tokens)
+        hs, src = self.transformer(src, pos_src, tokens)
         iou_token_out = hs[:, 0, :]
         box_tokens_out = hs[:, 1 : (1 + self.num_box_tokens), :]
 
-        # Upscale box embeddings and predict boxes using the box tokens
-        src3 = src2.transpose(1, 2).view(b, c, h, w)
-        upscaled_embedding = self.output_upscaling(src3)
-        hyper_in_list: List[torch.Tensor] = []
-        for i in range(self.num_box_tokens):
-            hyper_in_list.append(self.output_hypernetworks_mlps[i](box_tokens_out[:, i, :]))
-        hyper_in = torch.stack(hyper_in_list, dim=1)
-        b, c, h, w = upscaled_embedding.shape
-        boxes = (hyper_in @ upscaled_embedding.view(b, c, h * w)).view(b, -1, h, w)
+        # Predict boxes using the box tokens
+        boxes = self.box_prediction_head(box_tokens_out)
 
         # Generate box quality predictions
         iou_pred = self.iou_prediction_head(iou_token_out)
 
-        return boxes, iou_pred, src, src2, src3, upscaled_embedding, hyper_in
+        return boxes, iou_pred
 
 
 # Lightly adapted from
