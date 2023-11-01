@@ -59,6 +59,7 @@ class Sam(nn.Module):
     def forward(
         self,
         batched_input: List[Dict[str, Any]],
+        output_type: str,
         multimask_output: bool,
     ) -> List[Dict[str, torch.Tensor]]:
         """
@@ -83,6 +84,8 @@ class Sam(nn.Module):
                 Already transformed to the input frame of the model.
               'mask_inputs': (torch.Tensor) Batched mask inputs to the model,
                 in the form Bx1xHxW.
+          output_type (str): Either "box" or "mask" depending on what output
+            is desired from the model.
           multimask_output (bool): Whether the model should predict multiple
             disambiguating masks, or return a single mask.
 
@@ -113,26 +116,43 @@ class Sam(nn.Module):
                 boxes=image_record.get("boxes", None),
                 masks=image_record.get("mask_inputs", None),
             )
-            low_res_masks, iou_predictions = self.mask_decoder(
-                image_embeddings=curr_embedding.unsqueeze(0),
-                image_pe=self.prompt_encoder.get_dense_pe(),
-                sparse_prompt_embeddings=sparse_embeddings,
-                dense_prompt_embeddings=dense_embeddings,
-                multimask_output=multimask_output,
-            )
-            masks = self.postprocess_masks(
-                low_res_masks,
-                input_size=image_record["image"].shape[-2:],
-                original_size=image_record["original_size"],
-            )
-            masks = masks > self.mask_threshold
-            outputs.append(
-                {
-                    "masks": masks,
-                    "iou_predictions": iou_predictions,
-                    "low_res_logits": low_res_masks,
-                }
-            )
+            if output_type=='mask':
+                low_res_masks, iou_predictions = self.mask_decoder(
+                    image_embeddings=curr_embedding.unsqueeze(0),
+                    image_pe=self.prompt_encoder.get_dense_pe(),
+                    sparse_prompt_embeddings=sparse_embeddings,
+                    dense_prompt_embeddings=dense_embeddings,
+                    multimask_output=multimask_output,
+                )
+                masks = self.postprocess_masks(
+                    low_res_masks,
+                    input_size=image_record["image"].shape[-2:],
+                    original_size=image_record["original_size"],
+                )
+                masks = masks > self.mask_threshold
+                outputs.append(
+                    {
+                        "masks": masks,
+                        "iou_predictions": iou_predictions,
+                        "low_res_logits": low_res_masks,
+                    }
+                )
+
+            elif output_type=='box':
+                boxes, iou_predictions = self.box_decoder(
+                    image_embeddings=curr_embedding.unsqueeze(0),
+                    image_pe=self.prompt_encoder.get_dense_pe(),
+                    sparse_prompt_embeddings=sparse_embeddings
+                )
+                outputs.append(
+                    {
+                        "boxes": boxes,
+                        "iou_predictions": iou_predictions
+                    }
+                )
+            else:
+                raise ValueError('Output Type must be either "mask" or "box')
+
         return outputs
 
     def postprocess_masks(
