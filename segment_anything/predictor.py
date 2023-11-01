@@ -95,6 +95,7 @@ class SamPredictor:
         point_labels: Optional[np.ndarray] = None,
         box: Optional[np.ndarray] = None,
         mask_input: Optional[np.ndarray] = None,
+        output_type: str = 'box',
         multimask_output: bool = True,
         return_logits: bool = False,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -112,6 +113,8 @@ class SamPredictor:
           mask_input (np.ndarray): A low resolution mask input to the model, typically
             coming from a previous prediction iteration. Has form 1xHxW, where
             for SAM, H=W=256.
+          output_type (str): Either "box" or "mask" depending on what output
+            is desired from the model.
           multimask_output (bool): If true, the model will return three masks.
             For ambiguous input prompts (such as a single click), this will often
             produce better masks than a single prediction. If only a single
@@ -151,19 +154,39 @@ class SamPredictor:
             mask_input_torch = torch.as_tensor(mask_input, dtype=torch.float, device=self.device)
             mask_input_torch = mask_input_torch[None, :, :, :]
 
-        masks, iou_predictions, low_res_masks = self.predict_torch(
-            coords_torch,
-            labels_torch,
-            box_torch,
-            mask_input_torch,
-            multimask_output,
-            return_logits=return_logits,
-        )
+        if output_type=='mask':
+            masks, iou_predictions, low_res_masks = self.predict_torch(
+                coords_torch,
+                labels_torch,
+                box_torch,
+                mask_input_torch,
+                output_type,
+                multimask_output,
+                return_logits=return_logits,
+            )
 
-        masks_np = masks[0].detach().cpu().numpy()
-        iou_predictions_np = iou_predictions[0].detach().cpu().numpy()
-        low_res_masks_np = low_res_masks[0].detach().cpu().numpy()
-        return masks_np, iou_predictions_np, low_res_masks_np
+            masks_np = masks[0].detach().cpu().numpy()
+            iou_predictions_np = iou_predictions[0].detach().cpu().numpy()
+            low_res_masks_np = low_res_masks[0].detach().cpu().numpy()
+            return masks_np, iou_predictions_np, low_res_masks_np
+        
+        elif output_type=='box':
+            boxes, iou_predictions = self.predict_torch(
+                coords_torch,
+                labels_torch,
+                box_torch,
+                mask_input_torch,
+                output_type,
+                multimask_output,
+                return_logits=return_logits,
+            )
+
+            boxes_np = boxes.detach().cpu().numpy()
+            iou_predictions = iou_predictions.detach().cpu().numpy()
+            return boxes_np, iou_predictions
+        
+        else:
+            raise ValueError('Output Type must be either "mask" or "box"')
 
     @torch.no_grad()
     def predict_torch(
@@ -172,6 +195,7 @@ class SamPredictor:
         point_labels: Optional[torch.Tensor],
         boxes: Optional[torch.Tensor] = None,
         mask_input: Optional[torch.Tensor] = None,
+        output_type: str = 'box',
         multimask_output: bool = True,
         return_logits: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -225,22 +249,37 @@ class SamPredictor:
             masks=mask_input,
         )
 
-        # Predict masks
-        low_res_masks, iou_predictions = self.model.mask_decoder(
-            image_embeddings=self.features,
-            image_pe=self.model.prompt_encoder.get_dense_pe(),
-            sparse_prompt_embeddings=sparse_embeddings,
-            dense_prompt_embeddings=dense_embeddings,
-            multimask_output=multimask_output,
-        )
+        if output_type=='mask':
+            # Predict masks
+            low_res_masks, iou_predictions = self.model.mask_decoder(
+                image_embeddings=self.features,
+                image_pe=self.model.prompt_encoder.get_dense_pe(),
+                sparse_prompt_embeddings=sparse_embeddings,
+                dense_prompt_embeddings=dense_embeddings,
+                multimask_output=multimask_output,
+            )
 
-        # Upscale the masks to the original image resolution
-        masks = self.model.postprocess_masks(low_res_masks, self.input_size, self.original_size)
+            # Upscale the masks to the original image resolution
+            masks = self.model.postprocess_masks(low_res_masks, self.input_size, self.original_size)
 
-        if not return_logits:
-            masks = masks > self.model.mask_threshold
+            if not return_logits:
+                masks = masks > self.model.mask_threshold
 
-        return masks, iou_predictions, low_res_masks
+            return masks, iou_predictions, low_res_masks
+        
+        elif output_type=='box':
+            # Predict boxes
+            boxes, iou_predictions = self.model.box_decoder(
+                image_embeddings=self.features,
+                image_pe=self.model.prompt_encoder.get_dense_pe(),
+                sparse_prompt_embeddings=sparse_embeddings,
+                dense_prompt_embeddings=dense_embeddings
+            )
+
+            return boxes, iou_predictions
+        
+        else:
+            raise ValueError('Output Type must be either "mask" or "box"')
 
     def get_image_embedding(self) -> torch.Tensor:
         """

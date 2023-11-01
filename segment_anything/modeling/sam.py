@@ -151,7 +151,7 @@ class Sam(nn.Module):
                     }
                 )
             else:
-                raise ValueError('Output Type must be either "mask" or "box')
+                raise ValueError('Output Type must be either "mask" or "box"')
 
         return outputs
 
