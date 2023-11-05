@@ -186,10 +186,11 @@ class Sam(nn.Module):
         masks = F.interpolate(masks, original_size, mode="bilinear", align_corners=False)
         return masks
 
-    def preprocess(self, x: torch.Tensor) -> torch.Tensor:
+    def preprocess(self, x: torch.Tensor, normalize=True) -> torch.Tensor:
         """Normalize pixel values and pad to a square input."""
-        # Normalize colors
-        x = (x - self.pixel_mean) / self.pixel_std
+        if normalize:
+          # Normalize colors
+          x = (x - self.pixel_mean) / self.pixel_std
 
         # Pad
         h, w = x.shape[-2:]

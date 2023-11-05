@@ -89,6 +89,81 @@ class SamPredictor:
         self.features = self.model.image_encoder(input_image)
         self.is_image_set = True
 
+    def set_images(
+        self,
+        rgb_image: np.ndarray,
+        multi_image: np.ndarray,
+        image_format: str = "RGB",
+    ) -> None:
+        """
+        Calculates the image embeddings for two provided images, one in RGB, the multi
+        in DSM/NDVI/?. It then combines the two embeddings, currently by just adding
+        them together, in the future possibly by concatenation.
+        """
+        # Check that rgb_image and multi_image have the same shape
+        assert rgb_image.shape == multi_image.shape, f"Images must have same shapes, but \
+          first image is of shape {rgb_image.shape} and second image is of shape {multi_image.shape}."
+
+        # This doesn't really apply to "multi_image", but I've left it in place for rgb_image.
+        assert image_format in [
+            "RGB",
+            "BGR",
+        ], f"image_format must be in ['RGB', 'BGR'], is {image_format}."
+        if image_format != self.model.image_format:
+            rgb_image = rgb_image[..., ::-1]
+
+        # Transform the images to the form expected by the model
+        input_rgb = self.transform.apply_image(rgb_image)
+        input_rgb_torch = torch.as_tensor(input_rgb, device=self.device)
+        input_rgb_torch = input_rgb_torch.permute(2, 0, 1).contiguous()[None, :, :, :]
+
+        input_multi = self.transform.apply_image(multi_image)
+        input_multi_torch = torch.as_tensor(input_multi, device=self.device)
+        input_multi_torch = input_multi_torch.permute(2, 0, 1).contiguous()[None, :, :, :]
+
+        self.set_torch_images(input_rgb_torch, input_multi_torch, rgb_image.shape[:2])
+
+    @torch.no_grad()
+    def set_torch_images(
+        self,
+        transformed_rgb_image: torch.Tensor,
+        transformed_multi_image: torch.Tensor,
+        original_image_size: Tuple[int, ...],
+    ) -> None:
+        """
+        Calculates the image embeddings for the provided image, allowing
+        masks to be predicted with the 'predict' method. Expects the input
+        image to be already transformed to the format expected by the model.
+
+        Arguments:
+          transformed_image (torch.Tensor): The input image, with shape
+            1x3xHxW, which has been transformed with ResizeLongestSide.
+          original_image_size (tuple(int, int)): The size of the image
+            before transformation, in (H, W) format.
+        """
+        assert (
+            len(transformed_rgb_image.shape) == 4
+            and transformed_rgb_image.shape[1] == 3
+            and max(*transformed_rgb_image.shape[2:]) == self.model.image_encoder.img_size
+        ), f"set_torch_image input must be BCHW with long side {self.model.image_encoder.img_size}."
+        self.reset_image()
+
+        self.original_size = original_image_size
+        self.input_rgb_size = tuple(transformed_rgb_image.shape[-2:])
+        input_rgb_image = self.model.preprocess(transformed_rgb_image)
+        rgb_features = self.model.image_encoder(input_rgb_image)
+
+        # Do not apply normalization to multi channel
+        self.input_multi_size = tuple(transformed_multi_image.shape[-2:])
+        input_multi_image = self.model.preprocess(transformed_multi_image, normalize=False)
+        multi_features = self.model.image_encoder(input_multi_image)
+
+        # Add rgb_features and multi_features together
+        self.features = rgb_features + multi_features
+
+        self.is_image_set = True
+
+
     def predict(
         self,
         point_coords: Optional[np.ndarray] = None,
