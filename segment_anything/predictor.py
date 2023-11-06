@@ -272,8 +272,8 @@ class SamPredictor:
         mask_input: Optional[torch.Tensor] = None,
         output_type: str = 'box',
         multimask_output: bool = True,
-        return_logits: bool = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        return_logits: bool = False
+        ):
         """
         Predict masks for the given input prompts, using the currently set image.
         Input prompts are batched torch tensors and are expected to already be
