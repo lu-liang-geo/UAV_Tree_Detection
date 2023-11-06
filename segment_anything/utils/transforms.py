@@ -32,10 +32,13 @@ class ResizeLongestSide:
     
     def apply_multi(self, image: np.ndarray) -> np.ndarray:
         """
-        Expects a numpy array with shape HxWxC, but not necessarily uint8 format.
+        Expects a numpy array with shape HxWxC, but not necessarily uint8 format. The conversion
+        back to a numpy tensor and permutation back to HxWxC shape is unnecessary, as they are
+        undone later in the model, but are kept to maintain consistency with "apply_image" above. 
         """
         target_size = self.get_preprocess_shape(image.shape[0], image.shape[1], self.target_length)
-        return np.array(resize(torch.from_numpy(image), target_size))
+        target_tensor = torch.from_numpy(image).permute(2,0,1)
+        return np.array(resize(target_tensor, target_size)).permute(1,2,0)
 
     def apply_coords(self, coords: np.ndarray, original_size: Tuple[int, ...]) -> np.ndarray:
         """
