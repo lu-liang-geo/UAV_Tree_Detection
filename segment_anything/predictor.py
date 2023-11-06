@@ -246,7 +246,7 @@ class SamPredictor:
             return masks_np, iou_predictions_np, low_res_masks_np
         
         elif output_type=='box':
-            boxes, iou_predictions = self.predict_torch(
+            outputs = self.predict_torch(
                 coords_torch,
                 labels_torch,
                 box_torch,
@@ -256,9 +256,9 @@ class SamPredictor:
                 return_logits=return_logits,
             )
 
-            boxes_np = boxes.detach().cpu().numpy()
-            iou_predictions = iou_predictions.detach().cpu().numpy()
-            return boxes_np, iou_predictions
+            outputs['pred_boxes'] = outputs['pred_boxes'].detach().cpu().numpy()
+            outputs['pred_logits'] = outputs['pred_logits'].detach().cpu().numpy()
+            return outputs
         
         else:
             raise ValueError('Output Type must be either "mask" or "box"')
