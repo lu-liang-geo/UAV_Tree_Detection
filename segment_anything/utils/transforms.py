@@ -35,7 +35,7 @@ class ResizeLongestSide:
         Expects a numpy array with shape HxWxC, but not necessarily uint8 format.
         """
         target_size = self.get_preprocess_shape(image.shape[0], image.shape[1], self.target_length)
-        return np.array(resize(torch.from_numpy(image)))
+        return np.array(resize(torch.from_numpy(image), target_size))
 
     def apply_coords(self, coords: np.ndarray, original_size: Tuple[int, ...]) -> np.ndarray:
         """
