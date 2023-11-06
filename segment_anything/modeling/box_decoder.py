@@ -113,13 +113,16 @@ class BoxDecoder(nn.Module):
         iou_token_out = hs[:, 0, :]
         box_tokens_out = hs[:, 1 : (1 + self.num_box_tokens), :]
 
+        # Create output dictionary
+        output = dict()
+
         # Predict boxes using the box tokens
-        boxes = self.box_prediction_head(box_tokens_out)
+        output['pred_boxes'] = self.box_prediction_head(box_tokens_out)
 
         # Generate box quality predictions
-        iou_pred = self.iou_prediction_head(iou_token_out)
+        output['pred_logits'] = self.iou_prediction_head(iou_token_out)
 
-        return boxes, iou_pred
+        return output
 
 
 # Lightly adapted from

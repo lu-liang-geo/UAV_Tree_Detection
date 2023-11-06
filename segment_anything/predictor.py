@@ -344,14 +344,14 @@ class SamPredictor:
         
         elif output_type=='box':
             # Predict boxes
-            boxes, iou_predictions = self.model.box_decoder(
+            outputs = self.model.box_decoder(
                 image_embeddings=self.features,
                 image_pe=self.model.prompt_encoder.get_dense_pe(),
                 sparse_prompt_embeddings=sparse_embeddings,
                 dense_prompt_embeddings=dense_embeddings
             )
 
-            return boxes, iou_predictions
+            return outputs
         
         else:
             raise ValueError('Output Type must be either "mask" or "box"')
