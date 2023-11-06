@@ -117,7 +117,7 @@ class SamPredictor:
         input_rgb_torch = torch.as_tensor(input_rgb, device=self.device)
         input_rgb_torch = input_rgb_torch.permute(2, 0, 1).contiguous()[None, :, :, :]
 
-        input_multi = self.transform.apply_image(multi_image)
+        input_multi = self.transform.apply_multi(multi_image)
         input_multi_torch = torch.as_tensor(input_multi, device=self.device)
         input_multi_torch = input_multi_torch.permute(2, 0, 1).contiguous()[None, :, :, :]
 

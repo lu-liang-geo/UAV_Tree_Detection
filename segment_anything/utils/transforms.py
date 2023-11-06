@@ -29,6 +29,13 @@ class ResizeLongestSide:
         """
         target_size = self.get_preprocess_shape(image.shape[0], image.shape[1], self.target_length)
         return np.array(resize(to_pil_image(image), target_size))
+    
+    def apply_multi(self, image: np.ndarray) -> np.ndarray:
+        """
+        Expects a numpy array with shape HxWxC, but not necessarily uint8 format.
+        """
+        target_size = self.get_preprocess_shape(image.shape[0], image.shape[1], self.target_length)
+        return np.array(resize(torch.from_numpy(image)))
 
     def apply_coords(self, coords: np.ndarray, original_size: Tuple[int, ...]) -> np.ndarray:
         """
