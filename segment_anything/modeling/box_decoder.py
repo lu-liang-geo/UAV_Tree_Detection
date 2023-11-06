@@ -79,7 +79,7 @@ class BoxDecoder(nn.Module):
           torch.Tensor: batched predicted boxes
           torch.Tensor: batched predictions of box quality
         """
-        boxes, iou_pred = self.predict_boxes(
+        outputs = self.predict_boxes(
             image_embeddings=image_embeddings,
             image_pe=image_pe,
             sparse_prompt_embeddings=sparse_prompt_embeddings,
@@ -87,7 +87,7 @@ class BoxDecoder(nn.Module):
         )
 
         # Prepare output
-        return boxes, iou_pred
+        return outputs
 
     def predict_boxes(
         self,
@@ -114,15 +114,15 @@ class BoxDecoder(nn.Module):
         box_tokens_out = hs[:, 1 : (1 + self.num_box_tokens), :]
 
         # Create output dictionary
-        output = dict()
+        outputs = dict()
 
         # Predict boxes using the box tokens
-        output['pred_boxes'] = self.box_prediction_head(box_tokens_out)
+        outputs['pred_boxes'] = self.box_prediction_head(box_tokens_out)
 
         # Generate box quality predictions
-        output['pred_logits'] = self.iou_prediction_head(iou_token_out)
+        outputs['pred_logits'] = self.iou_prediction_head(iou_token_out)
 
-        return output
+        return outputs
 
 
 # Lightly adapted from
