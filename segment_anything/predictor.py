@@ -100,10 +100,7 @@ class SamPredictor:
         in DSM/NDVI/?. It then combines the two embeddings, currently by just adding
         them together, in the future possibly by concatenation.
         """
-        # Check that rgb_image and multi_image have the same shape
-        assert rgb_image.shape == multi_image.shape, f"Images must have same shapes, but \
-          first image is of shape {rgb_image.shape} and second image is of shape {multi_image.shape}."
-
+        
         # This doesn't really apply to "multi_image", but I've left it in place for rgb_image.
         assert image_format in [
             "RGB",
