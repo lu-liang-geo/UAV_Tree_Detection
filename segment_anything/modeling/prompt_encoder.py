@@ -93,10 +93,10 @@ class PromptEncoder(nn.Module):
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
         """Embeds box prompts."""
         boxes = boxes + 0.5  # Shift to center of pixel
-        coords = boxes.reshape(-1, 2, 2)
+        coords = boxes.reshape(1, -1, 2)  # Change reshape to allow multiple bounding boxes in a single image
         corner_embedding = self.pe_layer.forward_with_coords(coords, self.input_image_size)
-        corner_embedding[:, 0, :] += self.point_embeddings[2].weight
-        corner_embedding[:, 1, :] += self.point_embeddings[3].weight
+        corner_embedding[:, 0::2, :] += self.point_embeddings[2].weight  # Add corner_1 embedding to every even-numbered corner
+        corner_embedding[:, 1::2, :] += self.point_embeddings[3].weight  # Add corner_2 embedding to every odd-numbered corner
         return corner_embedding
 
     def _embed_masks(self, masks: torch.Tensor) -> torch.Tensor:
