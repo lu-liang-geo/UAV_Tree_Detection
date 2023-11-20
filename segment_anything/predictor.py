@@ -97,8 +97,7 @@ class SamPredictor:
     ) -> None:
         """
         Calculates the image embeddings for two provided images, one in RGB, the multi
-        in DSM/NDVI/?. It then combines the two embeddings, currently by just adding
-        them together, in the future possibly by concatenation.
+        in DSM/NDVI/Red-Edge. It then concatenates the two embeddings by their channels.
         """
         
         # This doesn't really apply to "multi_image", but I've left it in place for rgb_image.
@@ -155,8 +154,8 @@ class SamPredictor:
         input_multi_image = self.model.preprocess(transformed_multi_image, normalize=False)
         multi_features = self.model.image_encoder(input_multi_image)
 
-        # Add rgb_features and multi_features together
-        self.features = rgb_features + multi_features
+        # Concatenate rgb_features and multi_features together
+        self.features = torch.cat((rgb_features, multi_features), dim=1)
 
         self.is_image_set = True
 

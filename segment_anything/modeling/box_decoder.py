@@ -1,8 +1,6 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
+# Adapted from SAM's MaskDecoder and DETR
+# https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/modeling/mask_decoder.py
+# https://github.com/facebookresearch/detr/blob/main/models/detr.py
 
 import torch
 from torch import nn
@@ -18,8 +16,8 @@ class BoxDecoder(nn.Module):
     def __init__(
         self,
         *,
-        transformer_dim: int,
         transformer: nn.Module,
+        transformer_dim: int,
         num_boxes: int = 100,
         box_head_depth: int = 3,
         box_head_hidden_dim: int = 256,
@@ -51,6 +49,8 @@ class BoxDecoder(nn.Module):
         self.num_box_tokens = num_boxes
         self.box_tokens = nn.Embedding(self.num_box_tokens, transformer_dim)
 
+        self.reduce_image_embedding = CNN(
+            in_channels=transformer_dim * 2, out_channels=transformer_dim)  
         self.box_prediction_head = MLP(
             transformer_dim, box_head_hidden_dim, 4, box_head_depth, sigmoid_output=True)
         self.iou_prediction_head = MLP(
@@ -97,6 +97,10 @@ class BoxDecoder(nn.Module):
         dense_prompt_embeddings: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predicts boxes. See 'forward' for more details."""
+        # Reduce image embedding channels if two images were embedded together (i.e. RGB and Multi images)
+        if image_embeddings.shape[1] != self.transformer_dim:
+            image_embeddings = self.reduce_image_embedding(image_embeddings)
+
         # Concatenate output tokens
         output_tokens = torch.cat([self.iou_token.weight, self.box_tokens.weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
@@ -151,6 +155,22 @@ class MLP(nn.Module):
             x = F.sigmoid(x)
         return x
 
+
+class CNN(nn.Module):
+    def __init__(
+            self,
+            in_channels: int,
+            out_channels: int,
+    ) -> None:
+        super().__init__()
+        self.conv1 = nn.Conv2d(in_channels, in_channels * 2, 1)
+        self.conv2 = nn.Conv2d(in_channels * 2, out_channels, 1)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = F.relu(x)
+        x = self.conv2(x)
+        return x
 
 # Taken from DETR
 # https://github.com/facebookresearch/detr/blob/main/models/detr.py#L37
