@@ -154,8 +154,8 @@ class SamPredictor:
         input_multi_image = self.model.preprocess(transformed_multi_image, normalize=False)
         multi_features = self.model.image_encoder(input_multi_image)
 
-        # Concatenate rgb_features and multi_features together
-        self.features = torch.cat((rgb_features, multi_features), dim=1)
+        # Set RGB and Multi Features
+        self.features = rgb_features, multi_features
 
         self.is_image_set = True
 
