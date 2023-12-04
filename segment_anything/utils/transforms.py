@@ -28,7 +28,7 @@ class ResizeLongestSide:
         Expects a numpy array with shape HxWxC in uint8 format.
         """
         target_size = self.get_preprocess_shape(image.shape[0], image.shape[1], self.target_length)
-        return np.array(resize(to_pil_image(image), target_size))
+        return np.array(resize(to_pil_image(image), target_size, antialias=True))
     
     def apply_multi(self, image: np.ndarray) -> np.ndarray:
         """
@@ -38,7 +38,7 @@ class ResizeLongestSide:
         """
         target_size = self.get_preprocess_shape(image.shape[0], image.shape[1], self.target_length)
         target_tensor = torch.from_numpy(image).permute(2,0,1)
-        return np.array(resize(target_tensor, target_size)).transpose(1,2,0)
+        return np.array(resize(target_tensor, target_size, antialias=True)).transpose(1,2,0)
 
     def apply_coords(self, coords: np.ndarray, original_size: Tuple[int, ...]) -> np.ndarray:
         """
