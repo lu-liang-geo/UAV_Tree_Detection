@@ -12,7 +12,7 @@ from typing import Iterable
 
 import torch
 
-import utils.misc as utils
+from .utils import misc as utils
 
 
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
