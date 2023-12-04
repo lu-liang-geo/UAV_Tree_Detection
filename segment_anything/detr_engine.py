@@ -1,6 +1,6 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 
-# Lightly adapted from DETR:
+# Copied from DETR, changed import paths:
 # https://github.com/facebookresearch/detr/blob/main/engine.py
 """
 Train and eval functions used in main.py
