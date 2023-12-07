@@ -137,13 +137,6 @@ class NEONTreeDataset(torch.utils.data.Dataset):
     annotation = np.array(xyxy)
     annotated_image['annotation'] = annotation
 
-    # Convert bounding boxes to sv.Detections
-    '''
-    true_boxes = sv.Detections(xyxy=boxes, confidence=np.ones(len(boxes)))
-    box_annotator = sv.BoxAnnotator(thickness=2, color=sv.Color.red())
-    true_img = box_annotator.annotate(scene=rgb_img[:,:,::-1].copy(), detections=true_boxes, skip_label=True)
-    '''
-
     return annotated_image
 
   def get_image(self, basename, return_index=False):
