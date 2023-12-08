@@ -10,3 +10,4 @@ from .mask_decoder import MaskDecoder
 from .prompt_encoder import PromptEncoder
 from .transformer import TwoWayTransformer
 from .box_decoder import BoxDecoder
+from .loss import SetCriterion
