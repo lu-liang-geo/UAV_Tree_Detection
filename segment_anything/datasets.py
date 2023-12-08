@@ -122,7 +122,7 @@ class NEONTreeDataset(torch.utils.data.Dataset):
     # If Prompt Boxes have already been generated (and self.prompt_path is not None), load prompt boxes
     # and save in annotated_image.
     if self.prompt_path:
-      prompt = np.load(os.path.join(prompt_path, f'{basename}.npy'))
+      prompt = np.load(prompt_path)
       annotated_image['prompt'] = prompt
 
     # Extract bounding boxes from annotations, save in annotated_image.
