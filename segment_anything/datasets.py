@@ -49,7 +49,7 @@ class NEONTreeDataset(torch.utils.data.Dataset):
     ann_path = os.path.join(self.ann_path, f"{basename}.xml")
     if self.prompt_path:
       prompt_path = os.path.join(self.prompt_path, 'Boxes', f"{basename}.npy")
-    annotated_image = dict()
+    annotated_image = {'basename': basename}
 
     # Open RGB path and two paths used to construct multi image. Save rgb_img in annotated_image.
     with rasterio.open(rgb_path) as img:
@@ -58,7 +58,7 @@ class NEONTreeDataset(torch.utils.data.Dataset):
       hs_img = img.read()
     with rasterio.open(chm_path) as img:
       chm_img = img.read()
-    annotated_image['rgb_img'] = rgb_img
+    annotated_image['rgb'] = rgb_img
 
     # Remove blank rows or columns from edges of CHM and Hyperspectral images, based on null value of -9999.0 in CHM.
     if chm_img[0,0,1]==-9999.0:
@@ -117,7 +117,7 @@ class NEONTreeDataset(torch.utils.data.Dataset):
 
     # Create multi-channel image of chm, NDVI, and Red-Edge, save in annotated_image.
     multi_img = np.stack([chm_img, ndvi_img, edge_img], axis=-1).astype('float32')
-    annotated_image['multi_img'] = multi_img
+    annotated_image['multi'] = multi_img
 
     # If Prompt Boxes have already been generated (and self.prompt_path is not None), load prompt boxes
     # and save in annotated_image.
