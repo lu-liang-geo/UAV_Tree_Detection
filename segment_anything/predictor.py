@@ -6,6 +6,7 @@
 
 import numpy as np
 import torch
+import warnings
 
 from segment_anything.modeling import Sam
 
@@ -321,6 +322,11 @@ class SamPredictor:
         )
 
         if output_type=='mask':
+            if isinstance(self.features, tuple):
+                self.features = self.features[0]
+                warnings.warn('Predictor has both RGB and Multi image embeddings stored. Mask Decoder is not trained'\
+                              'for Multi image embeddings, so only RGB image embeddings will be used to generate masks.')
+
             # Predict masks
             low_res_masks, iou_predictions = self.model.mask_decoder(
                 image_embeddings=self.features,
@@ -339,6 +345,8 @@ class SamPredictor:
             return masks, iou_predictions, low_res_masks
         
         elif output_type=='box':
+            if isinstance(self.features, tuple):
+                self.features = torch.cat(self.features, dim=1)
             # Predict boxes
             outputs = self.model.box_decoder(
                 image_embeddings=self.features,
