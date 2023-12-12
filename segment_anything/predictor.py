@@ -146,7 +146,7 @@ class SamPredictor:
         self.reset_image()
 
         self.original_size = original_image_size
-        self.input_rgb_size = tuple(transformed_rgb_image.shape[-2:])
+        self.input_size = tuple(transformed_rgb_image.shape[-2:])
         input_rgb_image = self.model.preprocess(transformed_rgb_image)
         rgb_features = self.model.image_encoder(input_rgb_image)
 
