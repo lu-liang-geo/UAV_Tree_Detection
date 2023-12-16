@@ -16,4 +16,4 @@ from .automatic_mask_generator import SamAutomaticMaskGenerator
 from .datasets import NEONTreeDataset
 from .matcher import HungarianMatcher
 from .loss import SetCriterion
-from .detr_engine import train_one_epoch
+from .train_box_decoder import train_one_epoch
