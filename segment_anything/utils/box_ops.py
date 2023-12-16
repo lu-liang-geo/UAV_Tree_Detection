@@ -6,6 +6,8 @@
 Utilities for bounding box manipulation and GIoU.
 """
 import torch
+import numpy as np
+import supervision as sv
 from torchvision.ops.boxes import box_area
 
 
@@ -89,3 +91,159 @@ def masks_to_boxes(masks):
     y_min = y_mask.masked_fill(~(masks.bool()), 1e8).flatten(1).min(-1)[0]
 
     return torch.stack([x_min, y_min, x_max, y_max], 1)
+
+
+def box_area(box):
+    t_box = box.T
+    return (t_box[2] - t_box[0]) * (t_box[3] - t_box[1])
+
+
+def box_overlap(
+	boxes_a: np.ndarray, boxes_b: np.ndarray
+) -> np.ndarray:
+
+    area_a = box_area(boxes_a)
+    area_b = box_area(boxes_b)
+
+    top_left = np.maximum(boxes_a[:, None, :2], boxes_b[:, :2])
+    bottom_right = np.minimum(boxes_a[:, None, 2:], boxes_b[:, 2:])
+
+    area_inter = np.prod(
+    	np.clip(bottom_right - top_left, a_min=0, a_max=None), 2)
+
+    return area_inter / area_a[:, None]
+
+
+def external_box_suppression(
+   detections,
+   inter_threshold = 0.75,
+   ignore_categories = False):
+    '''
+    Unlike Non-Max Suppression, this function orders boxes by size (smallest to largest)
+    and eliminates larger boxes that contain smaller boxes over the inter_threshold, where
+    inter_threshold signifies the percent of the smaller box's total area that is contained
+    in the larger box. So if a smaller box has more than e.g. 75% of its area encompassed by
+    a larger box, that larger box is suppressed.
+
+
+    detections:   Supervision Detections object containing Nx6 array, where N is the number of
+                  predicted boxes, the first 4 columns are the xy coordinates of the top-left
+                  and bottom-right corners respectively of each box, the 5th column is the
+                  confidence, and the 6th column is the box label.
+
+    inter_threshold:  The percent of a given box's total area that is contained within another box
+                      to activate external_box_suppression.
+
+    ignore_categories:  If False, external_box_suppression will only be applied to boxes with the
+                        same label, otherwise will be applied between all boxes regardless of label.
+    '''
+
+    boxes = detections.xyxy
+    confidence = detections.confidence
+    categories = detections.class_id
+    areas = box_area(boxes)
+
+    rows = boxes.shape[0]
+
+    sort_index = areas.argsort()
+    boxes = boxes[sort_index]
+    confidence = confidence[sort_index]
+    categories = categories[sort_index]
+
+    overlaps = box_overlap(boxes, boxes)
+    overlaps = overlaps - np.eye(rows)
+
+    keep = np.ones(rows, dtype=bool)
+
+    for index, (iou, category) in enumerate(zip(overlaps, categories)):
+        if not keep[index]:
+            continue
+
+        if ignore_categories:
+            condition = (iou > inter_threshold)
+        else:
+            condition = (iou > inter_threshold) & (categories == category)
+        keep = keep & ~condition
+
+    new_detections = sv.Detections(
+        xyxy = boxes[keep],
+        confidence = confidence[keep],
+        class_id = categories[keep]
+    )
+
+    return new_detections
+
+
+def box_overlap_max(
+	boxes_a: np.ndarray, boxes_b: np.ndarray
+) -> np.ndarray:
+
+    area_a = box_area(boxes_a)
+    area_b = box_area(boxes_b)
+
+    top_left = np.maximum(boxes_a[:, None, :2], boxes_b[:, :2])
+    bottom_right = np.minimum(boxes_a[:, None, 2:], boxes_b[:, 2:])
+
+    area_inter = np.prod(
+    	np.clip(bottom_right - top_left, a_min=0, a_max=None), 2)
+
+    area_inter_norm1 = area_inter / area_a[:, None]
+    area_inter_norm2 = area_inter / area_a[None, :]
+    area_inter_norm = np.maximum(area_inter_norm1, area_inter_norm2)
+
+    return area_inter_norm
+
+
+def custom_nms(
+   detections,
+   inter_threshold = 0.75,
+   ignore_categories = False):
+    '''
+    Like regular Non-Max Suppression, but uses the inter_threshold of External Box Suppression
+    rather than an IoU Threshold like standard NMS.
+
+
+    detections:   Supervision Detections object containing Nx6 array, where N is the number of
+                  predicted boxes, the first 4 columns are the xy coordinates of the top-left
+                  and bottom-right corners respectively of each box, the 5th column is the
+                  confidence, and the 6th column is the box label.
+
+    inter_threshold:  The percent of a given box's total area that is contained within another box
+                      to activate external_box_suppression.
+
+    ignore_categories:  If False, external_box_suppression will only be applied to boxes with the
+                        same label, otherwise will be applied between all boxes regardless of label.
+    '''
+    boxes = detections.xyxy
+    confidence = detections.confidence
+    categories = detections.class_id
+
+    rows = boxes.shape[0]
+
+    sort_index = np.flip(confidence.argsort())
+    boxes = boxes[sort_index]
+    confidence = confidence[sort_index]
+    categories = categories[sort_index]
+
+    overlaps = box_overlap_max(boxes, boxes)
+    overlaps = overlaps - np.eye(rows)
+
+    keep = np.ones(rows, dtype=bool)
+
+    for index, (inter, category) in enumerate(zip(overlaps, categories)):
+        if not keep[index]:
+            continue
+
+        if ignore_categories:
+            condition = (inter > inter_threshold)
+        else:
+            condition = (inter > inter_threshold) & (categories == category)
+        keep = keep & ~condition
+
+    new_detections = sv.Detections(
+        xyxy = boxes[keep],
+        confidence = confidence[keep],
+        class_id = categories[keep]
+    )
+
+    return new_detections
