@@ -2,6 +2,14 @@
 # https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/modeling/mask_decoder.py
 # https://github.com/facebookresearch/detr/blob/main/models/detr.py
 
+'''
+NOTE: This is an older, incomplete implementation of BoxDecoder; the file box_decoder.py contains the
+current, complete implementation. I am saving this implementation as well because it is closer to the
+MaskDecoder, and if in the future we decide we want to predict a set number of boxes per-prompt (as 
+MaskDecoder does) rather than a set number of boxes per-image (as the current BoxDecoder does), it will 
+probably be easier to work back from this implementation than the current one in box_decoder.py.
+'''
+
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -19,11 +27,10 @@ class BoxDecoder(nn.Module):
         transformer: nn.Module,
         transformer_dim: int,
         num_boxes: int = 100,
-        num_classes: int = 1,
         box_head_depth: int = 3,
         box_head_hidden_dim: int = 256,
-        class_head_depth: int = 3,
-        class_head_hidden_dim: int = 256,
+        iou_head_depth: int = 3,
+        iou_head_hidden_dim: int = 256,
     ) -> None:
         """
         Predicts boxes given an image and prompt embeddings, using a
@@ -35,32 +42,34 @@ class BoxDecoder(nn.Module):
           transformer (nn.Module): the transformer used to predict boxes
           num_boxes (int): the number of boxes to predict within a region
             of interest
-          class_head_depth (int): the depth of the MLP used to predict
-            box class
-          class_head_hidden_dim (int): the hidden dimension of the MLP
-            used to predict box class
+          iou_head_depth (int): the depth of the MLP used to predict
+            box quality
+          iou_head_hidden_dim (int): the hidden dimension of the MLP
+            used to predict box quality
         """
         super().__init__()
         self.transformer_dim = transformer_dim
         self.transformer = transformer
 
+        self.num_boxes = num_boxes
+
+        self.iou_token = nn.Embedding(1, transformer_dim)
         self.num_box_tokens = num_boxes
-        self.num_classes = num_classes + 1  # num_classes + 1 for no-object
         self.box_tokens = nn.Embedding(self.num_box_tokens, transformer_dim)
 
         self.reduce_image_embedding = CNN(
             in_channels=transformer_dim * 2, out_channels=transformer_dim)  
         self.box_prediction_head = MLP(
             transformer_dim, box_head_hidden_dim, 4, box_head_depth, sigmoid_output=True)
-        self.class_prediction_head = MLP(
-            transformer_dim, class_head_hidden_dim, self.num_classes, class_head_depth)
+        self.iou_prediction_head = MLP(
+            transformer_dim, iou_head_hidden_dim, self.num_box_tokens, iou_head_depth)
 
     def forward(
         self,
         image_embeddings: torch.Tensor,
         image_pe: torch.Tensor,
         sparse_prompt_embeddings: torch.Tensor,
-        dense_prompt_embeddings: torch.Tensor = None,
+        dense_prompt_embeddings: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Predict boxes given image and prompt embeddings.
@@ -77,10 +86,6 @@ class BoxDecoder(nn.Module):
           torch.Tensor: batched predicted boxes
           torch.Tensor: batched predictions of box quality
         """
-        # TODO: either implement a way to read dense prompt embeddings or remove from BoxDecoder
-        if dense_prompt_embeddings is not None:
-          raise ValueError('BoxDecoder does not currently support dense prompt embeddings from masks.')
-
         outputs = self.predict_boxes(
             image_embeddings=image_embeddings,
             image_pe=image_pe,
@@ -103,23 +108,30 @@ class BoxDecoder(nn.Module):
         if image_embeddings.shape[1] != self.transformer_dim:
             image_embeddings = self.reduce_image_embedding(image_embeddings)
 
-        # Reshape sparse prompt embeddings so that multiple box prompts are concatenated in
-        # the 1st dimension rather than the 0th
-        sparse_prompt_embeddings = sparse_prompt_embeddings.reshape(1,-1,256)
-
         # Concatenate output tokens
-        tokens = torch.cat((self.box_tokens.weight[None], sparse_prompt_embeddings), dim=1)
+        output_tokens = torch.cat([self.iou_token.weight, self.box_tokens.weight], dim=0)
+        output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
+        tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
 
-        # Run the transformer, extract transformed box tokens
-        hs, _ = self.transformer(image_embeddings, image_pe, tokens)
-        box_tokens_out = hs[:, :self.num_box_tokens, :]
+        # Expand per-image data in batch direction to be per-box
+        src = torch.repeat_interleave(image_embeddings, tokens.shape[0], dim=0)
+        src = src + dense_prompt_embeddings
+        pos_src = torch.repeat_interleave(image_pe, tokens.shape[0], dim=0)
+        b, c, h, w = src.shape
 
-        # Predict bounding boxes and classes from transformed box tokens
-        pred_boxes = self.box_prediction_head(box_tokens_out)
-        pred_logits = self.class_prediction_head(box_tokens_out)
+        # Run the transformer
+        hs, src = self.transformer(src, pos_src, tokens)
+        iou_token_out = hs[:, 0, :]
+        box_tokens_out = hs[:, 1 : (1 + self.num_box_tokens), :]
 
-        # Return outputs in dictionary
-        outputs = {'pred_boxes' : pred_boxes, 'pred_logits' : pred_logits}
+        # Create output dictionary
+        outputs = dict()
+
+        # Predict boxes using the box tokens
+        outputs['pred_boxes'] = self.box_prediction_head(box_tokens_out)
+
+        # Generate box quality predictions
+        outputs['pred_logits'] = self.iou_prediction_head(iou_token_out)
 
         return outputs
 
