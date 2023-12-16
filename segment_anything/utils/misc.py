@@ -275,6 +275,10 @@ def collate_fn(batch):
     return tuple(batch)
 
 
+def vector_collate_fn(batch):
+    return [vectors for vectors in batch]
+
+
 def _max_by_axis(the_list):
     # type: (List[List[int]]) -> List[int]
     maxes = the_list[0]
