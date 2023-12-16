@@ -5,10 +5,10 @@ import numpy as np
 import xml.etree.ElementTree as ET
 
 class NEONTreeDataset(torch.utils.data.Dataset):
-  def __init__(self, data_path, ann_path, prompt_path=None, check_values=False):
+  def __init__(self, image_path, ann_path, prompt_path=None, check_values=False):
     '''
     params
-      data_path (str): Path to top-level training image directory (contains RGB, LiDAR, Hyperspectral, CHM)
+      image_path (str): Path to top-level training image directory (contains RGB, LiDAR, Hyperspectral, CHM)
       ann_path (str):  Path to annotations
 
     __init__ stores filenames from RGB folder, which will be used to retrieve relevant files from other
@@ -16,16 +16,16 @@ class NEONTreeDataset(torch.utils.data.Dataset):
     not found in these other folders.
     '''
     self.check_values = check_values
-    self.data_path = data_path
+    self.image_path = image_path
     self.ann_path = ann_path
     self.prompt_path = prompt_path
-    file_names = os.listdir(os.path.join(data_path, 'RGB'))
+    file_names = os.listdir(os.path.join(image_path, 'RGB'))
     problem_files = set(['2019_SJER_4_251000_4103000_image', '2019_TOOL_3_403000_7617000_image', 'TALL_043_2019', 'SJER_062_2018'])
     basenames = [name.split('.')[0] for name in file_names]
     basenames = [name for name in basenames if name not in problem_files]
-    basenames = [name for name in basenames if os.path.exists(os.path.join(data_path, 'Hyperspectral', f'{name}_hyperspectral.tif'))]
+    basenames = [name for name in basenames if os.path.exists(os.path.join(image_path, 'Hyperspectral', f'{name}_hyperspectral.tif'))]
     basenames = [name for name in basenames if os.path.exists(os.path.join(ann_path,f'{name}.xml'))]
-    basenames = [name for name in basenames if os.path.exists(os.path.join(data_path, 'CHM', f'{name}_CHM.tif'))]
+    basenames = [name for name in basenames if os.path.exists(os.path.join(image_path, 'CHM', f'{name}_CHM.tif'))]
     self.basenames = list(set(basenames))
 
   def __len__(self):
@@ -43,9 +43,9 @@ class NEONTreeDataset(torch.utils.data.Dataset):
     Currently I hardcode the multi_img channels, but later I may allow the user to specify them in __init__
     '''
     basename = self.basenames[idx]
-    rgb_path = os.path.join(self.data_path, 'RGB', f'{basename}.tif')
-    chm_path = os.path.join(self.data_path, 'CHM', f'{basename}_CHM.tif')
-    hs_path = os.path.join(self.data_path, 'Hyperspectral', f'{basename}_hyperspectral.tif')
+    rgb_path = os.path.join(self.image_path, 'RGB', f'{basename}.tif')
+    chm_path = os.path.join(self.image_path, 'CHM', f'{basename}_CHM.tif')
+    hs_path = os.path.join(self.image_path, 'Hyperspectral', f'{basename}_hyperspectral.tif')
     ann_path = os.path.join(self.ann_path, f"{basename}.xml")
     if self.prompt_path:
       prompt_path = os.path.join(self.prompt_path, 'Boxes', f"{basename}.npy")
