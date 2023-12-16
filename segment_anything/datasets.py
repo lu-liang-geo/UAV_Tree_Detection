@@ -145,3 +145,51 @@ class NEONTreeDataset(torch.utils.data.Dataset):
       return index
     else:
       return self.__getitem__(index)
+    
+
+
+class VectorDataset(torch.utils.data.Dataset):
+  '''
+  Dataset of preprocessed vectors from SAM and GroundingDINO. Depending on parameters, will include vectors
+  of RGB images, Multi images, and Prompt Boxes. It draws filenames from the annotations folder, and assumes
+  these basenames are used identically in the image folders and prompt folders.
+  '''
+  def __init__(self, image_path, prompt_path, ann_path, rgb=True, multi=True, prompt=True):
+    self.rgb = rgb
+    self.multi = multi
+    self.prompt = prompt
+    self.image_path = image_path
+    self.prompt_path = prompt_path
+    self.ann_path = ann_path
+
+    paths = os.listdir(os.path.join(ann_path, 'Labels'))
+    self.basenames = [path.split('.')[0] for path in paths]
+
+  def __len__(self):
+    return len(self.basenames)
+
+  def __getitem__(self, idx):
+    basename = self.basenames[idx]
+    vectors = {'basename': basename}
+    if self.rgb:
+      vectors['rgb'] = torch.load(os.path.join(self.image_path, 'RGB', f'{basename}.pt'))
+      embed_size = tuple(vectors['rgb'].shape[-2:])
+    if self.multi:
+      vectors['multi'] = torch.load(os.path.join(self.image_path, 'Multi', f'{basename}.pt'))
+      embed_size = tuple(vectors['multi'].shape[-2:])
+    if self.prompt:
+      vectors['prompt'] = {'sparse':torch.load(os.path.join(self.prompt_path, 'Sparse Embeddings', f'{basename}.pt')),
+                           'dense': torch.load(os.path.join(self.prompt_path, 'Dense Embeddings', f'{basename}.pt')),
+                           'position':torch.load(os.path.join(self.prompt_path, 'Positional Embeddings', f'{embed_size}.pt'))}
+    
+    vectors['annotation'] = {'boxes':torch.load(os.path.join(self.ann_path, 'Boxes', f'{basename}.pt')), 
+                             'labels':torch.load(os.path.join(self.ann_path, 'Labels', f'{basename}.pt'))}
+
+    return vectors
+
+  def get_image(self, basename, return_index=False):
+    index = self.basenames.index(basename)
+    if return_index:
+      return index
+    else:
+      return self.__getitem__(index)
