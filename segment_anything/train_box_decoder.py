@@ -34,7 +34,6 @@ def train_one_epoch(decoder: torch.nn.Module, criterion: torch.nn.Module,
             if image_vector.numel()==0:
                 raise ValueError('Either RGB or Multi vector must be provided to model, but both are empty.')
             sparse_prompt = vector['prompt']['sparse'].to(device)
-            dense_prompt = vector['prompt']['dense'].to(device)
             position_prompt = vector['prompt']['position'].to(device)
 
             outputs = decoder(image_vector,
