@@ -18,7 +18,7 @@ class BoxDecoder(nn.Module):
         *,
         transformer: nn.Module,
         transformer_dim: int,
-        num_boxes: int = 100,
+        num_boxes: int = 200,
         num_classes: int = 1,
         box_head_depth: int = 3,
         box_head_hidden_dim: int = 256,
