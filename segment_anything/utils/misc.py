@@ -288,6 +288,15 @@ def _max_by_axis(the_list):
     return maxes
 
 
+def model_size(model):
+  return sum(p.numel() for p in model.parameters())
+
+
+def model_params(model):
+  for name, params in model.named_parameters():
+    print(name, params.numel())
+
+
 class NestedTensor(object):
     def __init__(self, tensors, mask: Optional[Tensor]):
         self.tensors = tensors
