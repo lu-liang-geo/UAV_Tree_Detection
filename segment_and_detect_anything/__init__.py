@@ -6,6 +6,8 @@
 
 # Lightly adapted to incorporate NEONTreeDataset, VectorDataset
 
+# Source code at: https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/__init__.py
+
 from .build_sam import (
     build_sam,
     build_sam_vit_h,
@@ -16,6 +18,6 @@ from .build_sam import (
 from .predictor import SamPredictor
 from .automatic_mask_generator import SamAutomaticMaskGenerator
 from .datasets import NEONTreeDataset, VectorDataset
-from ..detr.models.matcher import HungarianMatcher
-from ..detr.models.criterion import SetCriterion
+from .detr.matcher import HungarianMatcher
+from .detr.criterion import SetCriterion
 from .train_box_decoder import train_one_epoch

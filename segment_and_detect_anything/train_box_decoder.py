@@ -1,9 +1,14 @@
+# Copyright (c) 2023 William Locke
+
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
+# Adapted from DETR:
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 
-# Copied from DETR, changed import paths:
-# https://github.com/facebookresearch/detr/blob/main/engine.py
+# Source code at: https://github.com/facebookresearch/detr/blob/main/engine.py
 """
-Train and eval functions used in main.py
+Train and eval functions
 """
 import math
 import os
@@ -12,16 +17,16 @@ from typing import Iterable
 
 import torch
 
-from ..detr.util import misc as utils
+from .detr import misc
 
 def train_one_epoch(decoder: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, max_norm: float = 0):
     decoder.train()
     criterion.train()
-    metric_logger = utils.MetricLogger(delimiter="  ")
-    metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
-    #metric_logger.add_meter('class_error', utils.SmoothedValue(window_size=1, fmt='{value:.2f}'))
+    metric_logger = misc.MetricLogger(delimiter="  ")
+    metric_logger.add_meter('lr', misc.SmoothedValue(window_size=1, fmt='{value:.6f}'))
+    #metric_logger.add_meter('class_error', misc.SmoothedValue(window_size=1, fmt='{value:.2f}'))
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 10
 
@@ -49,7 +54,7 @@ def train_one_epoch(decoder: torch.nn.Module, criterion: torch.nn.Module,
         losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
 
         # reduce losses over all GPUs for logging purposes
-        loss_dict_reduced = utils.reduce_dict(loss_dict)
+        loss_dict_reduced = misc.reduce_dict(loss_dict)
         loss_dict_reduced_unscaled = {f'{k}_unscaled': v
                                       for k, v in loss_dict_reduced.items()}
         loss_dict_reduced_scaled = {k: v * weight_dict[k]

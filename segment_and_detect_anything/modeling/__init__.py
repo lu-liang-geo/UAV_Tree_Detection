@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 # Lightly adapted to incorporate BoxDecoder
+# Source code at: https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/modeling/__init__.py
 
 from .sam import Sam
 from .image_encoder import ImageEncoderViT

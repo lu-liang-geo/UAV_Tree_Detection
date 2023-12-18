@@ -4,6 +4,8 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+# Source code at: https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/modeling/image_encoder.py
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

@@ -6,6 +6,8 @@
 
 # Lightly adapted to incorporate BoxDecoder
 
+# Source code at: https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/build_sam.py
+
 import torch
 
 from functools import partial

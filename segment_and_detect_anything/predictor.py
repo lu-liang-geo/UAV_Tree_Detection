@@ -8,11 +8,13 @@
 # set_images and set_torch_images
 # editing of predict and predict_torch methods to incorporate bounding box outputs
 
+# Source code at: https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/predictor.py
+
 import numpy as np
 import torch
 import warnings
 
-from segment_anything.modeling import Sam
+from .modeling import Sam
 
 from typing import Optional, Tuple
 

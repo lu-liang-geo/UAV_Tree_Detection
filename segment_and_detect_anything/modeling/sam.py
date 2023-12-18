@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 # Lightly adapted to include BoxDecoder (c) 2023 William Locke
+# Source code at: https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/modeling/sam.py
 
 import torch
 from torch import nn

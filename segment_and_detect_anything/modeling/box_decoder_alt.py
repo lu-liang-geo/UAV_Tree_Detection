@@ -26,7 +26,7 @@ from torch.nn import functional as F
 from typing import List, Tuple, Type
 
 from .common import LayerNorm2d
-from ...detr.util import box_ops
+from ..detr import box_ops
 
 
 class BoxDecoder(nn.Module):
