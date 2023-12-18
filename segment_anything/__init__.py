@@ -16,6 +16,6 @@ from .build_sam import (
 from .predictor import SamPredictor
 from .automatic_mask_generator import SamAutomaticMaskGenerator
 from .datasets import NEONTreeDataset, VectorDataset
-from .matcher import HungarianMatcher
-from .loss import SetCriterion
+from ..detr.models.matcher import HungarianMatcher
+from ..detr.models.criterion import SetCriterion
 from .train_box_decoder import train_one_epoch
