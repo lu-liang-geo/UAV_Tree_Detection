@@ -4,8 +4,7 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-# Lightly adapted to incorporate NEONTreeDataset, VectorDataset
-
+# Lightly adapted to incorporate NEONTreeDataset, VectorDataset, and train_one_epoch
 # Source code at: https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/__init__.py
 
 from .build_sam import (
@@ -18,6 +17,4 @@ from .build_sam import (
 from .predictor import SamPredictor
 from .automatic_mask_generator import SamAutomaticMaskGenerator
 from .datasets import NEONTreeDataset, VectorDataset
-from .detr.matcher import HungarianMatcher
-from .detr.criterion import SetCriterion
 from .train_box_decoder import train_one_epoch
