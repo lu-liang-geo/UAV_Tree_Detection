@@ -1,7 +1,10 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 
-# Copied from DETR, changed import paths:
-# https://github.com/facebookresearch/detr/blob/main/models/matcher.py
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
+# Code copied from DETR, changed import paths:
+# Source code at: https://github.com/facebookresearch/detr/blob/main/models/matcher.py
 """
 Modules to compute the matching cost and solve the corresponding LSAP.
 """

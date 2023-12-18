@@ -1,6 +1,16 @@
-# Adapted from SAM's MaskDecoder and DETR
-# https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/modeling/mask_decoder.py
-# https://github.com/facebookresearch/detr/blob/main/models/detr.py
+# Copyright (c) 2023 William Locke
+
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
+# Code adapted from SAM MaskDecoder and DETR
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+
+# Source code at:
+# SAM: https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/modeling/mask_decoder.py
+# DETR: https://github.com/facebookresearch/detr/blob/main/models/detr.py
+
 
 import torch
 from torch import nn

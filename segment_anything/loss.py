@@ -1,7 +1,10 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 
-# SetCriterion is taken from DETR:
-# https://github.com/facebookresearch/detr/blob/main/models/detr.py
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
+# SetCriterion is copied from DETR.
+# Source code at: https://github.com/facebookresearch/detr/blob/main/models/detr.py
 
 import torch
 import torch.nn as nn
@@ -186,8 +189,8 @@ class SetCriterion(nn.Module):
         return losses
     
 
-# Dice Loss and Sigmoid Focal Loss taken from DETR:
-# https://github.com/facebookresearch/detr/blob/main/models/segmentation.py
+# Dice Loss and Sigmoid Focal Loss copied from DETR.
+# Source code at: https://github.com/facebookresearch/detr/blob/main/models/segmentation.py
 def dice_loss(inputs, targets, num_boxes):
     """
     Compute the DICE loss, similar to generalized IOU for masks

@@ -4,6 +4,10 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+# Adaptations to code made by William Locke:
+# set_images and set_torch_images
+# editing of predict and predict_torch methods to incorporate bounding box outputs
+
 import numpy as np
 import torch
 import warnings

@@ -1,7 +1,12 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 
-# This file is taken from DETR:
-# https://github.com/facebookresearch/detr/blob/main/util/box_ops.py
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
+# Code copied from DETR.
+# Source code at: https://github.com/facebookresearch/detr/blob/main/util/box_ops.py
+
+# Additional functions (c) 2023 William Locke, marked below:
 """
 Utilities for bounding box manipulation and GIoU.
 """
@@ -93,6 +98,7 @@ def masks_to_boxes(masks):
     return torch.stack([x_min, y_min, x_max, y_max], 1)
 
 
+# New functions added by William Locke below
 def box_area(box):
     t_box = box.T
     return (t_box[2] - t_box[0]) * (t_box[3] - t_box[1])

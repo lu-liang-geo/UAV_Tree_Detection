@@ -1,7 +1,12 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 
-# Taken from DETR:
-# https://github.com/facebookresearch/detr/blob/main/util/misc.py
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
+# Code copied from DETR.
+# Source code at: https://github.com/facebookresearch/detr/blob/main/util/misc.py
+
+# Added functions to original code marked below:
 """
 Misc functions, including distributed helpers.
 
@@ -287,11 +292,11 @@ def _max_by_axis(the_list):
             maxes[index] = max(maxes[index], item)
     return maxes
 
-
+# Additional function added by William Locke
 def model_size(model):
   return sum(p.numel() for p in model.parameters())
 
-
+# Additional function added by William Locke
 def model_params(model):
   for name, params in model.named_parameters():
     print(name, params.numel())

@@ -4,6 +4,8 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+# Lightly adapted to include BoxDecoder (c) 2023 William Locke
+
 import torch
 from torch import nn
 from torch.nn import functional as F
