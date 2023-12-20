@@ -18,7 +18,9 @@ class NEONTreeDataset(torch.utils.data.Dataset):
 
     __init__ stores filenames from RGB folder, which will be used to retrieve relevant files from other
     folders. Because RGB folder has four files not found in Hyperspectral or CHM, we remove any entries
-    not found in these other folders.
+    not found in these other folders. We also manually remove four images we consider unsuitable for
+    training / evaluation, either because they have a large number of invalid pixels or they don't have
+    good annotations.
     '''
     self.check_values = check_values
     self.image_path = image_path

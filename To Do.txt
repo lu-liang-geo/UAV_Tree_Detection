@@ -1,0 +1,9 @@
+To Do
+
+Data Preprocessing
+- Decide whether to cut training dataset into 400 x 400 pixels squares like eval dataset
+- Possibly convert CHM (in Neon dataset) to DSM (in our dataset) or vice versa
+
+Box Decoder Model
+- Identify and fix training bug
+- Implement PCA as a method of combining RGB and Multi image vectors

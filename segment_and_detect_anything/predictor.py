@@ -330,7 +330,7 @@ class SamPredictor:
         if output_type=='mask':
             if isinstance(self.features, tuple):
                 self.features = self.features[0]
-                warnings.warn('Predictor has both RGB and Multi image embeddings stored. Mask Decoder is not trained'\
+                warnings.warn('Predictor has both RGB and Multi image embeddings stored. Mask Decoder is not trained \n'\
                               'for Multi image embeddings, so only RGB image embeddings will be used to generate masks.')
 
             # Predict masks
