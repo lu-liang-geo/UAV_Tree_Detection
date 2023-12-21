@@ -173,7 +173,7 @@ class SamPredictor:
         point_labels: Optional[np.ndarray] = None,
         box: Optional[np.ndarray] = None,
         mask_input: Optional[np.ndarray] = None,
-        output_type: str = 'box',
+        output_type: str = 'mask',
         multimask_output: bool = True,
         return_logits: bool = False,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
