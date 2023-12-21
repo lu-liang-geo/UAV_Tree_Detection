@@ -273,7 +273,7 @@ class SamPredictor:
         point_labels: Optional[torch.Tensor],
         boxes: Optional[torch.Tensor] = None,
         mask_input: Optional[torch.Tensor] = None,
-        output_type: str = 'box',
+        output_type: str = 'mask',
         multimask_output: bool = True,
         return_logits: bool = False
         ):
