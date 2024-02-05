@@ -218,6 +218,6 @@ class FastDataset(torch.utils.data.Dataset):
   
   def __getitem__(self, idx):
     basename = self.basenames[idx]
-    with open(os.path.join(self.path, basename), 'rb') as f:
+    with open(os.path.join(self.path, f'{basename}.pickle'), 'rb') as f:
       vectors = pickle.load(f)
     return vectors
