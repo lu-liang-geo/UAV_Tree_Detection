@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
+import pickle
 import rasterio
 import torch
 import numpy as np
@@ -200,3 +201,23 @@ class VectorDataset(torch.utils.data.Dataset):
       return index
     else:
       return self.__getitem__(index)
+    
+
+
+class FastDataset(torch.utils.data.Dataset):
+  '''
+  Same as VectorDataset, but all vectors are saved together in single pickle files, so loading is faster.
+  '''
+  def __init__(self, pickle_path):
+    paths = os.listdir(pickle_path)
+    self.path = pickle_path
+    self.basenames = [path.split('.')[0] for path in paths]
+
+  def __len__(self):
+    return len(self.basenames)
+  
+  def __getitem__(self, idx):
+    basename = self.basenames[idx]
+    with open(os.path.join(self.path, basename), 'rb') as f:
+      vectors = pickle.load(f)
+    return vectors
