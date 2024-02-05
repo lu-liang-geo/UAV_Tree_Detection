@@ -46,8 +46,8 @@ def train_one_epoch(decoder: torch.nn.Module, criterion: torch.nn.Module,
                               sparse_prompt)
             batch_outputs.append(outputs)
 
-        preds = {k : torch.cat([output[k] for output in batch_outputs]) for k in ['pred_boxes', 'pred_logits']}
-        targets = [vector['annotation'] for vector in batch]
+        preds = {k : torch.cat([output[k].to(device) for output in batch_outputs]) for k in ['pred_boxes', 'pred_logits']}
+        targets = [{k : vector['annotation'][k].to(device) for k in ['boxes','labels']} for vector in batch]
 
         loss_dict = criterion(preds, targets)
         weight_dict = criterion.weight_dict
