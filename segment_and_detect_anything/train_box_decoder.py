@@ -93,5 +93,5 @@ def train_wandb(decoder: torch.nn.Module, criterion: torch.nn.Module,
 
     for i in range(epoch):
       metrics = train_one_epoch(decoder, criterion, data_loader, optimizer, device, i, max_norm)
-      wandb.log({key: val for key,val in metrics if not key.endswith('_unscaled')})
+      wandb.log({key: val for key,val in metrics.items() if not key.endswith('_unscaled')})
     wandb.finish()
