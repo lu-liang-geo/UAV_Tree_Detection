@@ -106,28 +106,50 @@ class ModelEvaluator:
 
         cv_utils.plot_img_with_annotations(image, detections, size)
         cv_utils.plot_img_with_annotations(image, TreeDetections(annotations), size)
+
+    def _postprocess_bboxes(self, bboxes, scores, confidence_threshold, nms_threshold, nms_type):
+        if len(bboxes) > 0:
+            # Filter low confidence boxes
+            bboxes, scores = ModelEvaluator._filter_bboxes(bboxes, scores, confidence_threshold)
+            # Apply NMS
+            if nms_type == "iomin":
+                nms_func = cv_utils.compute_nms_iomin
+            elif nms_type == "iou":
+                nms_func = cv_utils.compute_nms_iou
+            else:
+                raise "nms_type must be either iomin or iou"
+            
+            bboxes, scores = nms_func(bboxes, scores, nms_threshold)
+        return bboxes, scores
     
-    def eval_and_plot_image_annotations(self, rgb_image, annotations, confidence_threshold, size : tuple):
+    def eval_and_plot_image_annotations(self, rgb_image, annotations: np.ndarray, confidence_threshold: float, nms_threshold: float, size : tuple, nms_type: str):
         '''Evaluates an image to generate predicted bboxes, the plots image with annotations
         
         Args:
             rgb_image : Image in RGB format
             annotations : Array of annotations, has shape (N, 4) where N is number of annotated bboxes for the image
+            confidence_threshold: Confidence threshold for bbox filtering
+            nms_threshold: Non-maximal supression threshold for bbox filtering
             size : Size of the plot, must be tuple of length 2 characterizing the length and width of the plot
+            nms_type: Specify either "iou" or "iomin" to choose Intersection-over-union or Intersection-over-minimum-area for Non-maximal suppression
         '''
         detection = self.predict_image(self.model, rgb_image)
-        bboxes, scores = ModelEvaluator._filter_bboxes(detection["bboxes"], detection["scores"], confidence_threshold)
+        bboxes, scores = self._postprocess_bboxes(detection["bboxes"], detection["scores"], confidence_threshold, nms_threshold, nms_type)
 
         cv_utils.plot_img_with_annotations(rgb_image, TreeDetections(xyxy=bboxes, confidence=scores), size)
         cv_utils.plot_img_with_annotations(rgb_image, TreeDetections(annotations), size)
         
-    def evaluate_model(self, confidence_threshold: float, iou_threshold: float) -> tuple[List[Detections], dict]:
+    def evaluate_model(self, confidence_threshold: float, iou_threshold: float, nms_threshold: float, nms_type: str) -> tuple[List[TreeDetections], dict]:
         '''Returns a dictionary containing bounding boxes, confidence scores, and metrics
         
         Args:
             confidence_threshold : Confidence threshold to filter out low-confidence bboxes
+            iou_threshold: IoU threshold to count matched bboxes as a true positive
+            nms_threshold: Non-maximal supression threshold for bbox filtering
+            nms_type: Specify either "iou" or "iomin" to choose Intersection-over-union or Intersection-over-minimum-area for Non-maximal suppression
 
         Returns:
+            A list of detections, one Detections object for each image
             A dictionary containing 3 key-value pairs:
                 "bboxes" : Array of bounding boxes for each image
                 "scores" : Array of confidence scores for each image
@@ -149,14 +171,12 @@ class ModelEvaluator:
         for i in range(len(detections_bboxes)):
             assert len(detections_bboxes[i]) == len(detections_scores[i]), "Number of detected bboxes and scores should be the same"
 
-            if (len(detections_bboxes[i]) == 0): # Don't need to filter if no bboxes detected
-                continue
-
-            detections_bboxes[i], detections_scores[i] = ModelEvaluator._filter_bboxes(detections_bboxes[i], detections_scores[i], confidence_threshold)
+            detections_bboxes[i], detections_scores[i] = self._postprocess_bboxes(detections_bboxes[i], detections_scores[i], confidence_threshold, nms_threshold, nms_type)
         
         # Format detections into Detections objects
         formatted_detections = []
         for i in range(len(detections_bboxes)):
+            # Format into TreeDetections object
             fmt_detection = TreeDetections(xyxy=np.array(detections_bboxes[i]), 
                                     confidence=np.array(detections_scores[i]))
             formatted_detections.append(fmt_detection)

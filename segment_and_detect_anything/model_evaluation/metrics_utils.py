@@ -10,7 +10,7 @@ import scipy
 from typing import List
 import torch
 import numpy as np
-from cv_utils import TreeDetections
+from cv_utils import TreeDetections, bbox_iou
 
 def compute_map(detections : List[TreeDetections], annotations : list):
     '''Computes the mean average precision of a set of detections
@@ -26,8 +26,8 @@ def compute_map(detections : List[TreeDetections], annotations : list):
         box_format='xyxy',
         iou_type='bbox',
         iou_thresholds=None, # Uses default [0.05, 0.1, ..., 1]
-        rec_thresholds=None, # Uses default [0, 0.01, 0.02, ..., 1]
-        max_detection_thresholds=[10, 100, 1000],
+        rec_thresholds=[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1], # Uses default [0, 0.01, 0.02, ..., 1]
+        max_detection_thresholds=[100, 1000, 10000],
         class_metrics=False,
         extended_summary=False,
         average="macro",
@@ -46,7 +46,7 @@ def compute_map(detections : List[TreeDetections], annotations : list):
     
     metric.update(predictions, targets)
 
-    return metric.compute()["map"]
+    return metric.compute()["map_50"]
 
 def bbox_iou(box1: np.ndarray, box2: np.ndarray):
     x_diff = max(0, min(box1[2], box2[2]) - max(box1[0], box2[0]))
@@ -106,7 +106,7 @@ def compute_precision_recall(detections : List[np.ndarray], annotations : np.nda
             recalls.append(1)
             continue
         if len(detections[i]) == 0 or len(annotations[i]) == 0:
-            print("Zero detections or annotations for this image, not included in metric computation")
+            print(f"{len(detections[i])} detections and {len(annotations[i])} annotations for this image, not included in metric computation")
             continue
 
         matchings = hungarian_matching(detections[i], annotations[i])
@@ -137,7 +137,7 @@ def compute_metrics(detections : List[TreeDetections], annotations : np.ndarray,
 
     map = compute_map(detections, annotations)
     precision, recall = compute_precision_recall([detection.xyxy for detection in detections], annotations, iou_threshold)
-    f1 = 2 * precision * recall / (precision + recall)
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall != 0) else 0
 
     return {
         "map" : map,
