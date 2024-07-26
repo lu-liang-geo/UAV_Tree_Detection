@@ -7,4 +7,4 @@
 # Lightly adapted to incorporate lidar_tools
 # Source code at: https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/utils/__init__.py
 
-from .lidar_tools import rasterize_lidar
+from .lidar_tools import *
