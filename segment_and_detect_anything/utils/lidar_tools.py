@@ -2,6 +2,8 @@ import os
 import numpy as np
 import pandas as pd
 import laspy
+from sklearn.cluster import KMeans
+
 
 def rasterize_lidar(lidar_folder, filename, individual_labels, min_threshold=1):
     '''
