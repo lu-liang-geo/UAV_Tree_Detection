@@ -68,3 +68,5 @@ def rasterize_lidar(lidar_folder, filename, individual_labels, min_threshold=1):
     else:
         # Assign 1 to a given pixel if any LiDAR point within that pixel has a label higher than 0
         label_array = (valid_points['max']>0).to_numpy(dtype='int')[np.newaxis,:]
+
+    return coord_array, label_array
