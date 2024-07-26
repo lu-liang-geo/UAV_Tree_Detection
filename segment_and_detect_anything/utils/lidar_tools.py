@@ -47,7 +47,7 @@ def rasterize_lidar(lidar_folder, filename, individual_labels, min_threshold=1):
 
     # Allocate X和Y
     df['x_bin'] = pd.cut(df['x'], bins=x_bins, labels=False, include_lowest=True)
-    df['y_bin'] = pd.cut(df['y'], bins=y_bins, labels=False, include_lowest=True)
+    df['y_bin'] = 399 - pd.cut(df['y'], bins=y_bins, labels=False, include_lowest=True)
 
     num_trees = df['label'].max()
 
