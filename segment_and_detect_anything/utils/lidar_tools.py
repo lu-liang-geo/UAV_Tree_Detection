@@ -230,9 +230,9 @@ def sample_points(coordinates, labels, pos_samples, neg_samples,
     return sample_coordinates, sample_labels
 
 
-def show_as_mask(img, detections, coordinates, labels, 
+def show_as_mask(img, detections, coordinates, labels, ax=None,
                  show_positive=True, show_negative=False, show_boxes=False, 
-                 title=None, save=False, output_folder='/content'):
+                 figsize=(5,5), neg_opacity=1.0, title=None, save=False, output_folder='/content'):
     '''
     Display rasterized LiDAR points as mask, with one pixel per one point. Useful for visualizing images
     with large numbers of LiDAR points. Can visualize collectively labeled or individually labeled points.
@@ -245,11 +245,18 @@ def show_as_mask(img, detections, coordinates, labels,
                                T is the number of labeled trees, and N is the number of points
         labels (ndarray): T x N array of binary labels, where T is the number of labeled trees (T = 1 for
                           collective labels)
+        ax (matplotlib Axes): If embedding this image in a larger matplotlib figure, pass an axis of that
+                              figure as "ax". This will return the image as an Axes object and allow it
+                              to be embedded in the larger figure.
         show_positive (bool): If True, show the positively labeled points (trees)
         show_negative (bool): If True, show the negatively labeled points (background)
         show_boxes (bool): If True, show the bounding boxes around trees
-        title (str): Optional title to show on image, and name to save image
-        save (bool): If True, save the image (requires title above)
+        figsize (tuple): Size of displayed image
+        neg_opacity (float): Opacity of negative points, value between 0 and 1
+        title (str): Optional title to show on image. If title is provided as save is True, title will
+                     also be the name of the saved file.
+        save (bool): If True, save the image as png. If title is not None, will use title for save name,
+                     otherwise will save as "lidar_mask.png".
         output_folder (str): Path to the folder to save image
     
     returns:
@@ -287,7 +294,7 @@ def show_as_mask(img, detections, coordinates, labels,
             neg_mask[i,mask_coords[:,1],mask_coords[:,0]] = True
         detections.mask = neg_mask
         # Background points are always white for mask visualization
-        neg_annotator = sv.MaskAnnotator(color=sv.Color.WHITE, opacity=0.75)
+        neg_annotator = sv.MaskAnnotator(color=sv.Color.WHITE, opacity=neg_opacity)
         img = neg_annotator.annotate(scene=img.copy(), detections=detections)
 
     if show_boxes:
@@ -296,20 +303,30 @@ def show_as_mask(img, detections, coordinates, labels,
         img = box_annotator.annotate(scene=img.copy(), detections=detections)
 
     # Display figure, optionally title and save
-    plt.figure(figsize=(10,10))
-    plt.axis('off')
-    plt.imshow(img[:,:,::-1])
+    return_ax = True
+    if ax is None:
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=figsize)
+        return_ax = False
+    ax.axis('off')
+    ax.imshow(img[:,:,::-1])
+
+    if return_ax:
+        return ax
+
     if title:
-        plt.title(title)
+        ax.set_title(title)
     plt.tight_layout()
     if save:
-        plt.savefig(os.path.join(output_folder, title+'.jpg'))
+        if title:
+            plt.savefig(os.path.join(output_folder, title+'.png'))
+        else:
+            plt.savefig(os.path.join(output_folder, 'lidar_mask.png'))
     plt.show()
 
 
-def show_as_points(img, coordinates, labels, 
-                   show_positive=True, show_negative=False, 
-                   marker_size=75, title=None, save=False, output_folder='/content'):
+def show_as_points(img, detections, coordinates, labels, ax=None,
+                   show_positive=True, show_negative=False, show_boxes=False, 
+                   figsize=(5,5), marker_size=75, title=None, save=False, output_folder='/content'):
     '''
     Display rasterized LiDAR points as dots, larger than a pixel. Useful for visualizing images with few
     LiDAR points. Can visualize collectively labeled or individually labeled points, however multiple trees
@@ -321,16 +338,24 @@ def show_as_points(img, coordinates, labels,
 
     params:
         img (array): RGB image as array
+        detections (sv.Detections): Annotations for image put into Supervision Detections object
         coordinates (ndarray): 1 x N x 2 array or T x N x 2 array of X,Y coordinates, depending on
                                whether the coordinates were sampled with individual labels previously;
                                T is the number of labeled trees, and N is the number of points    
         labels (ndarray): T x N array of binary labels, where T is the number of labeled trees (T = 1 for
                           collective labels)
+        ax (matplotlib Axes): If embedding this image in a larger matplotlib figure, pass an axis of that
+                              figure as "ax". This will return the image as an Axes object and allow it
+                              to be embedded in the larger figure.
         show_positive (bool): If True, show the positively labeled points (trees)
         show_negative (bool): If True, show the negatively labeled points (background)
         show_boxes (bool): If True, show the bounding boxes around trees
-        title (str): Optional title to show on image, and name to save image
-        save (bool): If True, save the image (requires title above)
+        marker_size (int): Size of dots to display for LiDAR points
+        figsize (tuple): Size of displayed image
+        title (str): Optional title to show on image. If title is provided as save is True, title will
+                     also be the name of the saved file.
+        save (bool): If True, save the image as png. If title is not None, will use title for save name,
+                     otherwise will save as "lidar_mask.png".
         output_folder (str): Path to the folder to save image
     
         returns:
@@ -341,10 +366,18 @@ def show_as_points(img, coordinates, labels,
     colors = prop_cycle.by_key()['color']
     colors = colors[:7] + colors[8:]
 
+    if show_boxes:
+        # Show boxes  (we use color BLUE because it will be reversed to RED later)
+        box_annotator = sv.BoxAnnotator(thickness=1, color=sv.Color.BLUE)
+        img = box_annotator.annotate(scene=img.copy(), detections=detections)
+
     # Create figure, display image
-    plt.figure(figsize=(10,10))
-    plt.axis('off')
-    plt.imshow(img)
+    return_ax = True
+    if ax is None:
+      fig, ax = plt.subplots(nrows=1, ncols=1, figsize=figsize)
+      return_ax = False
+    ax.axis('off')
+    ax.imshow(img)
 
     # T = 1 for collective points, otherwise the number of labeled trees
     num_labels = len(labels)
@@ -359,7 +392,7 @@ def show_as_points(img, coordinates, labels,
         for i in range(num_labels):
             pos_index = labels[i].nonzero()[0]
             pos_coord = coordinates[i, pos_index]
-            plt.scatter(pos_coord[:,0], pos_coord[:,1], color=colors[i], marker='.', s=marker_size, edgecolor=colors[i], linewidth=1)
+            ax.scatter(pos_coord[:,0], pos_coord[:,1], color=colors[i%len(colors)], marker='.', s=marker_size, edgecolor=colors[i%len(colors)], linewidth=1)
 
     if show_negative:
         # Show background points
@@ -370,12 +403,18 @@ def show_as_points(img, coordinates, labels,
         for i in range(num_labels):
             neg_index = (labels[i]==0).nonzero()[0]
             neg_coord = coordinates[i, neg_index]
-            plt.scatter(neg_coord[:,0], neg_coord[:,1], color='white', marker='.', s=marker_size, edgecolor=colors[i], linewidth=1)
+            ax.scatter(neg_coord[:,0], neg_coord[:,1], color='white', marker='.', s=marker_size, edgecolor=colors[i%len(colors)], linewidth=1)
+
+    if return_ax:
+      return ax
 
     # Display figure, optionally title and save
     if title:
         plt.title(title)
     plt.tight_layout()
     if save:
-        plt.savefig(os.path.join(output_folder, title+'.jpg'))
+        if title:
+            plt.savefig(os.path.join(output_folder, title+'.png'))
+        else:
+            plt.savefig(os.path.join(output_folder, 'lidar_points.png'))
     plt.show()
