@@ -334,7 +334,7 @@ def show_as_points(img, detections, coordinates, labels, ax=None,
     Alternatively, can visualize each tree's points in a separate image using the code below:
 
     for i in range(len(labels)):
-        show_as_points(img, coordinates[i:i+1], labels[i,i+1])
+        show_as_points(img, coordinates[i:i+1], labels[i:i+1])
 
     params:
         img (array): RGB image as array
@@ -381,9 +381,6 @@ def show_as_points(img, detections, coordinates, labels, ax=None,
 
     # T = 1 for collective points, otherwise the number of labeled trees
     num_labels = len(labels)
-
-    # Broadcast coordinates to T x N x 2 if not already input as such
-    coordinates = np.broadcast_to(coordinates, (num_labels, coordinates.shape[1], coordinates.shape[2]))
 
     if show_positive:
         # Show tree points
