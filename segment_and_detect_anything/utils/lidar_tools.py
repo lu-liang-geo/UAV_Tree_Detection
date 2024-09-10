@@ -1,5 +1,6 @@
 import os
 import laspy
+import rasterio
 import numpy as np
 import pandas as pd
 import supervision as sv
