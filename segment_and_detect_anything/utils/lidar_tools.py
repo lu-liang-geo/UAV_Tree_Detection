@@ -308,7 +308,7 @@ def show_as_mask(img, detections, coordinates, labels, ax=None,
     # Display figure, optionally title and save
     return_ax = True
     if ax is None:
-        fig, ax = plt.subplots(nrows=1, ncols=1, fig_size=fig_size)
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=fig_size)
         return_ax = False
     ax.axis('off')
     ax.imshow(img[:,:,::-1])
