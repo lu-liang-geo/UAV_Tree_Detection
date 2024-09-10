@@ -23,12 +23,11 @@ def rasterize_lidar(lidar_folder, filename, individual_labels, min_threshold=1):
                              order to add that pixel as a point prompt. Default is 1.
     
     returns:
-        coord_array: N x P x 2 array of pixel coordinates, where N is the number of trees,
-                     P is the number of points, and 2 is the x and y coordinates. If using
-                     common label for all trees, N is 1.
+        coord_array: 1 x P x 2 array of X,Y coordinates in pixel space, where P is the 
+                     number of rasterized points
         label_array: N x P array of 1s and 0s, 1 to indicate the corresponding entry in
                      coord_array is a specific tree, 0 to indicate background or a different
-                     tree. If uusing common label for all trees, N is 1.
+                     tree. If using common label for all trees, N is 1.
     '''
 
     # TODO: Generalize function to non-NEON datasets
@@ -139,7 +138,7 @@ def sample_points(coordinates, labels, pos_samples, neg_samples,
 
     params:
         coordinates (ndarray): 1 x N x 2 array of X,Y coordinates, where N is the total number of points
-        labels (ndarray): T x N x 2 array of binary labels, where T is the number of labeled trees
+        labels (ndarray): T x N array of binary labels, where T is the number of labeled trees
                           (1 for collective labels)
         pos_samples (int): The number of positive samples to draw, either in total for collectively
                            labeled points or per tree for individually labeled points
@@ -232,7 +231,8 @@ def sample_points(coordinates, labels, pos_samples, neg_samples,
 
 def show_as_mask(img, detections, coordinates, labels, ax=None,
                  show_positive=True, show_negative=False, show_boxes=False, 
-                 figsize=(5,5), neg_opacity=1.0, title=None, save=False, output_folder='/content'):
+                 img_size=(400,400), fig_size=(5,5), neg_opacity=1.0, title=None, 
+                 save=False, output_folder='/content'):
     '''
     Display rasterized LiDAR points as mask, with one pixel per one point. Useful for visualizing images
     with large numbers of LiDAR points. Can visualize collectively labeled or individually labeled points.
@@ -240,9 +240,8 @@ def show_as_mask(img, detections, coordinates, labels, ax=None,
     params:
         img (array): RGB image as array
         detections (sv.Detections): Annotations for image put into Supervision Detections object
-        coordinates (ndarray): 1 x N x 2 array or T x N x 2 array of X,Y coordinates, depending on
-                               whether the coordinates were sampled with individual labels previously;
-                               T is the number of labeled trees, and N is the number of points
+        coordinates (ndarray): 1 x N x 2 array or T x N x 2 array of X,Y coordinates; if coordinates were
+                               sampled using "sample_points", then T is the number of labeled trees
         labels (ndarray): T x N array of binary labels, where T is the number of labeled trees (T = 1 for
                           collective labels)
         ax (matplotlib Axes): If embedding this image in a larger matplotlib figure, pass an axis of that
@@ -251,7 +250,8 @@ def show_as_mask(img, detections, coordinates, labels, ax=None,
         show_positive (bool): If True, show the positively labeled points (trees)
         show_negative (bool): If True, show the negatively labeled points (background)
         show_boxes (bool): If True, show the bounding boxes around trees
-        figsize (tuple): Size of displayed image
+        img_size (tuple): Image size in pixels (H x W)
+        fig_size (tuple): Display size in inches (W x H)
         neg_opacity (float): Opacity of negative points, value between 0 and 1
         title (str): Optional title to show on image. If title is provided as save is True, title will
                      also be the name of the saved file.
@@ -268,11 +268,12 @@ def show_as_mask(img, detections, coordinates, labels, ax=None,
     num_labels = len(labels)
 
     # Broadcast coordinates to T x N x 2 if not already input as such
+    original_shape = coordinates.shape
     coordinates = np.broadcast_to(coordinates, (num_labels, coordinates.shape[1], coordinates.shape[2]))
 
     if show_positive:
         # Show tree points
-        pos_mask = np.full((num_labels, 400, 400), False)
+        pos_mask = np.full((num_labels, img_size[0], img_size[1]), False)
         for i in range(num_labels):
             mask_index = labels[i].nonzero()[0]
             mask_coords = coordinates[i, mask_index]
@@ -287,7 +288,9 @@ def show_as_mask(img, detections, coordinates, labels, ax=None,
 
     if show_negative:
         # Show background points
-        neg_mask = np.full((num_labels, 400, 400), False)
+        neg_mask = np.full((original_shape[0], img_size[0], img_size[1]), False)
+        if original_shape[0] == 1:
+            labels = np.max(labels, axis=0)[np.newaxis]
         for i in range(len(neg_mask)):
             mask_index = (labels[i]==0).nonzero()[0]
             mask_coords = coordinates[i, mask_index]
@@ -305,7 +308,7 @@ def show_as_mask(img, detections, coordinates, labels, ax=None,
     # Display figure, optionally title and save
     return_ax = True
     if ax is None:
-        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=figsize)
+        fig, ax = plt.subplots(nrows=1, ncols=1, fig_size=fig_size)
         return_ax = False
     ax.axis('off')
     ax.imshow(img[:,:,::-1])
@@ -326,7 +329,8 @@ def show_as_mask(img, detections, coordinates, labels, ax=None,
 
 def show_as_points(img, detections, coordinates, labels, ax=None,
                    show_positive=True, show_negative=False, show_boxes=False, 
-                   figsize=(5,5), marker_size=75, title=None, save=False, output_folder='/content'):
+                   img_size=(400,400), fig_size=(5,5), marker_size=75, title=None, 
+                   save=False, output_folder='/content'):
     '''
     Display rasterized LiDAR points as dots, larger than a pixel. Useful for visualizing images with few
     LiDAR points. Can visualize collectively labeled or individually labeled points, however multiple trees
@@ -339,9 +343,8 @@ def show_as_points(img, detections, coordinates, labels, ax=None,
     params:
         img (array): RGB image as array
         detections (sv.Detections): Annotations for image put into Supervision Detections object
-        coordinates (ndarray): 1 x N x 2 array or T x N x 2 array of X,Y coordinates, depending on
-                               whether the coordinates were sampled with individual labels previously;
-                               T is the number of labeled trees, and N is the number of points    
+        coordinates (ndarray): 1 x N x 2 array or T x N x 2 array of X,Y coordinates; if coordinates were
+                               sampled using "sample_points", then T is the number of labeled trees
         labels (ndarray): T x N array of binary labels, where T is the number of labeled trees (T = 1 for
                           collective labels)
         ax (matplotlib Axes): If embedding this image in a larger matplotlib figure, pass an axis of that
@@ -351,7 +354,8 @@ def show_as_points(img, detections, coordinates, labels, ax=None,
         show_negative (bool): If True, show the negatively labeled points (background)
         show_boxes (bool): If True, show the bounding boxes around trees
         marker_size (int): Size of dots to display for LiDAR points
-        figsize (tuple): Size of displayed image
+        img_size (tuple): Image size in pixels (H x W)
+        fig_size (tuple): Display size in inches (W x H)
         title (str): Optional title to show on image. If title is provided as save is True, title will
                      also be the name of the saved file.
         save (bool): If True, save the image as png. If title is not None, will use title for save name,
@@ -374,7 +378,7 @@ def show_as_points(img, detections, coordinates, labels, ax=None,
     # Create figure, display image
     return_ax = True
     if ax is None:
-      fig, ax = plt.subplots(nrows=1, ncols=1, figsize=figsize)
+      fig, ax = plt.subplots(nrows=1, ncols=1, figsize=fig_size)
       return_ax = False
     ax.axis('off')
     ax.imshow(img)
