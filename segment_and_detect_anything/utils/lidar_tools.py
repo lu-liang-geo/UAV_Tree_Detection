@@ -8,30 +8,34 @@ from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import euclidean_distances
 
 
-def rasterize_lidar(lidar_folder, filename, individual_labels, min_threshold=1):
+def rasterize_lidar(lidar_folder, rgb_folder, filename, label=False, boxes=None,
+                    img_size=(400,400), min_threshold=1):
     '''
     This function is written to work with the images and labels provided in the NEONTreeEvaluation dataset.
-    To make it generalizable to other datasets, we would need to include user-specified parameters for image 
+    To make it generalizable to other datasets, we would need to include user-specified parameters for image
     size and tree labels, as well as probably some other adjustments.
 
     params:
         lidar_folder (str): Path to folder containing laz files
-        filename (str): Lidar filename minus the ".laz" extension
-        individual_labels (bool): True to assign each tree its unique label in Lidar,
-                                  False to assign all trees a common label of 1
-        min_threshold (int): Number of Lidar points that fall within a given pixel in 
+        rgb_folder (str): Path to folder containing tiff files
+        filename (str): Lidar / tiff filename minus the extension
+        label (bool): True if Lidar data already has "label" field with individual
+                      tree labels
+        boxes (np.array): T x 4 array of [x0,y0,x1,y1] bounding boxes, where T is the
+                          total number of boxes (trees). If provided, used to label
+                          Lidar points for individual trees.
+        img_size (tuple): RGB image size in pixels (H x W)
+        min_threshold (int): Number of Lidar points that fall within a given pixel in
                              order to add that pixel as a point prompt. Default is 1.
-    
+
     returns:
-        coord_array: 1 x P x 2 array of X,Y coordinates in pixel space, where P is the 
+        coord_array: 1 x P x 2 array of X,Y coordinates in pixel space, where P is the
                      number of rasterized points
         label_array: N x P array of 1s and 0s, 1 to indicate the corresponding entry in
                      coord_array is a specific tree, 0 to indicate background or a different
                      tree. If using common label for all trees, N is 1.
     '''
 
-    # TODO: Generalize function to non-NEON datasets
-    
     # Read Lidar file
     las = laspy.read(os.path.join(lidar_folder, f'{filename}.laz'))
 
@@ -39,39 +43,46 @@ def rasterize_lidar(lidar_folder, filename, individual_labels, min_threshold=1):
     points = np.vstack((las.x, las.y, las.z)).transpose()
     df = pd.DataFrame(points, columns=['x', 'y', 'z'])
 
-    # Add label
-    df['label'] = las.label
+    # Align Lidar coordinates with tiff indices
+    with rasterio.open(os.path.join(rgb_folder, filename+'.tif')) as rast_img:
+        pixels = [rast_img.index(x,y) for x,y in zip(las.x, las.y)]
+        # Points on right-most and bottom-most edges of the image are recorded at index 400, should be 399
+        df['x_bin'] = [pixel[1] if pixel[1]!=400 else 399 for pixel in pixels]
+        df['y_bin'] = [pixel[0] if pixel[0]!=400 else 399 for pixel in pixels]
 
-    # Define grid
-    xmin, xmax = df['x'].min(), df['x'].max()
-    ymin, ymax = df['y'].min(), df['y'].max()
+    # If Lidar data has labels, add these to dataframe
+    if label:
+        df['label'] = las.label
+        num_trees = df['label'].max()
 
-    x_bins = np.linspace(xmin, xmax, 401)
-    y_bins = np.linspace(ymin, ymax, 401)
+    # Otherwise, if boxes provided, use these to label Lidar data
+    elif boxes is not None:
+        num_trees = len(boxes)
+        df['label'] = 0
+        for i, box in enumerate(boxes):
+            xmin, xmax = box[0], box[2]
+            ymin, ymax = box[1], box[3]
+            df.loc[df['x_bin'].between(xmin, xmax) & df['y_bin'].between(ymin, ymax) & df['z'].gt(2), 'label'] = i+1
 
-    # Allocate X和Y
-    df['x_bin'] = pd.cut(df['x'], bins=x_bins, labels=False, include_lowest=True)
-    df['y_bin'] = 399 - pd.cut(df['y'], bins=y_bins, labels=False, include_lowest=True)
+    # Otherwise use a height threshold to label all points above 2 meters as "1" for "tree"
+    else:
+        df['label'] = 0
+        df.loc[df['z']>2, 'label'] = 1
+        num_trees = 1
 
-    num_trees = df['label'].max()
-
-    # count the number of LiDAR points in each grid (count) and the highest label (max)
+    # Record the number of LiDAR points in each grid space (count) and the highest label (max)
     grid_labels = df.groupby(['x_bin', 'y_bin'])['label'].agg(['max','count']).reset_index()
 
     # use min_threshold to select valid points
     valid_points = grid_labels[grid_labels['count'] >= min_threshold]
 
-    # N x 2
+    # 1 x N x 2
     coord_array = valid_points[['x_bin', 'y_bin']].to_numpy()[np.newaxis,:]
-    if individual_labels:
-        # Create an array for each tree, with ones for that tree and zeros elsewhere, then stack together.
-        # Assign based on the highest label (max)
-        label_array = np.zeros((num_trees, len(valid_points)), dtype=int)
-        for tree_id in range(1, num_trees + 1):
-            label_array[tree_id - 1] = (valid_points['max'] == tree_id).astype(int).to_numpy()
-    else:
-        # Assign 1 to a given pixel if any LiDAR point within that pixel has a label higher than 0
-        label_array = (valid_points['max']>0).to_numpy(dtype='int')[np.newaxis,:]
+    # Create an array for each tree, with ones for that tree and zeros elsewhere, then stack together.
+    # Assign based on the highest label (max)
+    label_array = np.zeros((num_trees, len(valid_points)), dtype=int)
+    for tree_id in range(1, num_trees + 1):
+        label_array[tree_id - 1] = (valid_points['max'] == tree_id).astype(int).to_numpy()
 
     return coord_array, label_array
 
