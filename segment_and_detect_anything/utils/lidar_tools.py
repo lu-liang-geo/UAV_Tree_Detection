@@ -159,8 +159,9 @@ def sample_points(coordinates, labels, pos_samples, neg_samples,
                            labeled points or per tree for individually labeled points
         neg_samples (int): The number of negative samples to draw, either in total for collectively
                            labeled points or per tree for individually labeled points
-        distance_weight (bool): If True, give higher weight to points near the edges of trees; only
-                                works for individually labeled points, ignored otherwise
+        distance_weight (bool): If True, give higher weight to points near the edges of trees; may
+                                produce undesirable results with collectively labeled points, suggest
+                                setting to False in this case
         neg_sample_spread (int): When using distance weights, use this number to adjust how spread out
                                  negative samples are from the tree; higher values indicate higher spread,
                                  while lower values indicate tighter clustering around trees
@@ -190,7 +191,15 @@ def sample_points(coordinates, labels, pos_samples, neg_samples,
         pos_coords = coordinates[0,pos_indices]
         neg_coords = coordinates[0,neg_indices]
 
-        if distance_weight:
+        # If there are fewer positive points than pos_samples, supplement with additional negative samples
+        if len(pos_indices) >= pos_samples:
+            num_pos = pos_samples
+        else:
+            num_pos = len(pos_indices)
+        num_neg = pos_samples - num_pos + neg_samples
+
+        # Distance weighting is only possible with > 0 positive points
+        if distance_weight is True and num_pos > 0:
             # Find the center pixel of the positive points
             pos_center = pos_coords.mean(axis=0).reshape(1,-1)
 
@@ -208,24 +217,20 @@ def sample_points(coordinates, labels, pos_samples, neg_samples,
 
             # Use distances to calculate sampling probabilities
             # (Boundary points between tree vs background or tree vs tree have higher probability of being sampled)
-            pos_probs = pos_distances / sum(pos_distances)
+            if num_pos > 1:
+                pos_probs = pos_distances / sum(pos_distances)
+            else:
+                pos_probs = [1.0]
 
             # Use neg_sample_spread to further weight spread of negative points
             spread = 1 / neg_sample_spread
             neg_exp = np.exp(-spread*neg_distances)
             neg_probs = neg_exp / sum(neg_exp)
 
-      # If there are fewer positive points than pos_samples, supplement with additional negative samples
-        if len(pos_indices) >= pos_samples:
-            num_pos = pos_samples
-        else:
-            num_pos = len(pos_indices)
-        num_neg = pos_samples - num_pos + neg_samples
-
-        # Select a random subset of positive indices
-        if distance_weight:
+            # Select a random subset of positive indices
             pos_indices = rng.choice(pos_indices, num_pos, replace=False, p=pos_probs, shuffle=False)
             neg_indices = rng.choice(neg_indices, num_neg, replace=False, p=neg_probs, shuffle=False)
+
         else:
             pos_indices = rng.choice(pos_indices, num_pos, replace=False, shuffle=False)
             neg_indices = rng.choice(neg_indices, num_neg, replace=False, shuffle=False)
