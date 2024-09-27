@@ -44,6 +44,11 @@ def rasterize_lidar(lidar_folder, rgb_folder, filename, label=False, boxes=None,
     points = np.vstack((las.x, las.y, las.z)).transpose()
     df = pd.DataFrame(points, columns=['x', 'y', 'z'])
 
+    # If Lidar data has labels, add these to dataframe
+    if label:
+        df['label'] = las.label
+        num_trees = df['label'].max()
+
     # Align Lidar coordinates with tiff indices
     with rasterio.open(os.path.join(rgb_folder, filename+'.tif')) as rast_img:
         left, bottom, right, top = rast_img.bounds
@@ -54,10 +59,9 @@ def rasterize_lidar(lidar_folder, rgb_folder, filename, label=False, boxes=None,
         df['y_bin'] = [pixel[0] if pixel[0]!=400 else 399 for pixel in pixels]
         df = df.astype({'x_bin':'int', 'y_bin':'int'})
 
-    # If Lidar data has labels, add these to dataframe
+    # Already added label above, but this if statement allows elif and else statements below to work
     if label:
-        df['label'] = las.label
-        num_trees = df['label'].max()
+        pass
 
     # Otherwise, if boxes provided, use these to label Lidar data
     elif boxes is not None:
