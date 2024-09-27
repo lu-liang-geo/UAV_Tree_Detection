@@ -46,10 +46,13 @@ def rasterize_lidar(lidar_folder, rgb_folder, filename, label=False, boxes=None,
 
     # Align Lidar coordinates with tiff indices
     with rasterio.open(os.path.join(rgb_folder, filename+'.tif')) as rast_img:
+        left, bottom, right, top = rast_img.bounds
+        df = df[df['x'].between(left, right) & df['y'].between(bottom, top)]        
         pixels = [rast_img.index(x,y) for x,y in zip(las.x, las.y)]
         # Points on right-most and bottom-most edges of the image are recorded at index 400, should be 399
         df['x_bin'] = [pixel[1] if pixel[1]!=400 else 399 for pixel in pixels]
         df['y_bin'] = [pixel[0] if pixel[0]!=400 else 399 for pixel in pixels]
+        df = df.astype({'x_bin':'int', 'y_bin':'int'})
 
     # If Lidar data has labels, add these to dataframe
     if label:
