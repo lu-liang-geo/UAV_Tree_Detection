@@ -131,7 +131,7 @@ def external_box_suppression(
     in the larger box. So if a smaller box has more than e.g. 75% of its area encompassed by
     a larger box, that larger box is suppressed.
 
-
+    params:
     detections:   Supervision Detections object containing Nx6 array, where N is the number of
                   predicted boxes, the first 4 columns are the xy coordinates of the top-left
                   and bottom-right corners respectively of each box, the 5th column is the
@@ -142,6 +142,9 @@ def external_box_suppression(
 
     ignore_categories:  If False, external_box_suppression will only be applied to boxes with the
                         same label, otherwise will be applied between all boxes regardless of label.
+
+    returns:
+    keep: Index of the detections to keep after non-max suppression.
     '''
 
     boxes = detections.xyxy
@@ -171,13 +174,7 @@ def external_box_suppression(
             condition = (iou > inter_threshold) & (categories == category)
         keep = keep & ~condition
 
-    new_detections = sv.Detections(
-        xyxy = boxes[keep],
-        confidence = confidence[keep],
-        class_id = categories[keep]
-    )
-
-    return new_detections
+    return keep
 
 
 def box_overlap_max(
@@ -208,17 +205,20 @@ def custom_nms(
     Like regular Non-Max Suppression, but uses the inter_threshold of External Box Suppression
     rather than an IoU Threshold like standard NMS.
 
-
+    params:
     detections:   Supervision Detections object containing Nx6 array, where N is the number of
                   predicted boxes, the first 4 columns are the xy coordinates of the top-left
                   and bottom-right corners respectively of each box, the 5th column is the
                   confidence, and the 6th column is the box label.
 
     inter_threshold:  The percent of a given box's total area that is contained within another box
-                      to activate external_box_suppression.
+                      to activate custom non-max suppression.
 
     ignore_categories:  If False, external_box_suppression will only be applied to boxes with the
                         same label, otherwise will be applied between all boxes regardless of label.
+
+    returns:
+    keep: Index of the detections to keep after non-max suppression.
     '''
     boxes = detections.xyxy
     confidence = detections.confidence
@@ -246,10 +246,4 @@ def custom_nms(
             condition = (inter > inter_threshold) & (categories == category)
         keep = keep & ~condition
 
-    new_detections = sv.Detections(
-        xyxy = boxes[keep],
-        confidence = confidence[keep],
-        class_id = categories[keep]
-    )
-
-    return new_detections
+    return keep
