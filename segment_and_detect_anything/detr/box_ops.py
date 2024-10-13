@@ -177,48 +177,54 @@ def external_box_suppression(
     return keep
 
 
-def box_overlap_max(
-	boxes_a: np.ndarray, boxes_b: np.ndarray
-) -> np.ndarray:
-
-    area_a = box_area(boxes_a)
-    area_b = box_area(boxes_b)
-
-    top_left = np.maximum(boxes_a[:, None, :2], boxes_b[:, :2])
-    bottom_right = np.minimum(boxes_a[:, None, 2:], boxes_b[:, 2:])
-
-    area_inter = np.prod(
-    	np.clip(bottom_right - top_left, a_min=0, a_max=None), 2)
-
-    area_inter_norm1 = area_inter / area_a[:, None]
-    area_inter_norm2 = area_inter / area_a[None, :]
-    area_inter_norm = np.maximum(area_inter_norm1, area_inter_norm2)
-
-    return area_inter_norm
-
-
-def custom_nms(
-   detections,
-   inter_threshold = 0.75,
-   ignore_categories = False):
+def intersection_over_minimum_area(boxes):
     '''
-    Like regular Non-Max Suppression, but uses the inter_threshold of External Box Suppression
-    rather than an IoU Threshold like standard NMS.
+    Similar to IoU, but instead of dividing the area of the intersection by
+    the area of the union, divide it by the area of the smaller box.
 
     params:
-    detections:   Supervision Detections object containing Nx6 array, where N is the number of
-                  predicted boxes, the first 4 columns are the xy coordinates of the top-left
-                  and bottom-right corners respectively of each box, the 5th column is the
-                  confidence, and the 6th column is the box label.
-
-    inter_threshold:  The percent of a given box's total area that is contained within another box
-                      to activate custom non-max suppression.
-
-    ignore_categories:  If False, external_box_suppression will only be applied to boxes with the
-                        same label, otherwise will be applied between all boxes regardless of label.
+        boxes (ndarray): N x 4 array of boxes in xyxy format. The intersection
+                         over minimum area of each box in the array will be
+                         calculated with every other box in the array.
 
     returns:
-    keep: Index of the detections to keep after non-max suppression.
+        inter_over_min_area (ndarray): N x N array giving the intersection over
+                                       minimum area of every box with every
+                                       other box.
+    '''
+    areas = box_area(boxes)
+
+    top_left = np.maximum(boxes[:, None, :2], boxes[:, :2])
+    bottom_right = np.minimum(boxes[:, None, 2:], boxes[:, 2:])
+
+    inter_area = np.prod(
+    	np.clip(bottom_right - top_left, a_min=0, a_max=None), 2)
+
+    inter_over_area_1 = inter_area / areas[:, None]
+    inter_over_area_2 = inter_area / areas[None, :]
+    inter_over_min_area = np.maximum(inter_over_area_1, inter_over_area_2)
+
+    return inter_over_min_area
+
+
+def custom_nms(detections, threshold = 0.75, ignore_categories = False):
+    '''
+    Like regular Non-Max Suppression, but instead of intersection over union (IoU), measures
+    intersection over the area of the smaller box. This means if e.g. a smaller box is completely
+    contained in a box twice its size, while the IoU would be 0.5, the intersection over minimum
+    area would be 1.0, because the area of the smaller box is equal to the area of the intersection.
+
+    params:
+        detections:   Supervision Detections object with xyxy, confidence, and class_id fields.
+
+         threshold:  The percent of a given box's total area that is contained within another box
+                     to activate custom non-max suppression.
+
+        ignore_categories:  If False, external_box_suppression will only be applied to boxes with the
+                            same label, otherwise will be applied between all boxes regardless of label.
+
+    returns:
+        keep: Index of the detections to keep after non-max suppression.
     '''
     boxes = detections.xyxy
     confidence = detections.confidence
@@ -231,19 +237,19 @@ def custom_nms(
     confidence = confidence[sort_index]
     categories = categories[sort_index]
 
-    overlaps = box_overlap_max(boxes, boxes)
+    overlaps = intersection_over_minimum_area(boxes)
     overlaps = overlaps - np.eye(rows)
 
     keep = np.ones(rows, dtype=bool)
 
-    for index, (inter, category) in enumerate(zip(overlaps, categories)):
+    for index, (overlap, category) in enumerate(zip(overlaps, categories)):
         if not keep[index]:
             continue
 
         if ignore_categories:
-            condition = (inter > inter_threshold)
+            condition = (overlap > threshold)
         else:
-            condition = (inter > inter_threshold) & (categories == category)
+            condition = (overlap > threshold) & (categories == category)
         keep = keep & ~condition
 
-    return keep
+    return keep[sort_index.argsort()]
