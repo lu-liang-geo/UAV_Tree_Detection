@@ -141,7 +141,7 @@ class NEONTreeDataset(torch.utils.data.Dataset):
       name = obj.find('name').text
       if name == 'Tree':
         bbox = obj.find('bndbox')
-        xyxy.append([int(bbox[i].text) for i in range(4)])
+        xyxy.append([int(bbox[i].text)-1 for i in range(4)])
     annotation = np.array(xyxy)
     annotated_image['annotation'] = annotation
 
