@@ -9,12 +9,18 @@ from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import euclidean_distances
 
 
-def rasterize_lidar(lidar_folder, rgb_folder, filename, label=False, boxes=None,
-                    img_size=(400,400), min_threshold=1):
+def rasterize_lidar(lidar_folder, rgb_folder, filename, label=False, non_tree_label=0,
+                    boxes=None, height_threshold=2, img_size=(400,400)):
     '''
-    This function is written to work with the images and labels provided in the NEONTreeEvaluation dataset.
-    To make it generalizable to other datasets, we would need to include user-specified parameters for image
-    size and tree labels, as well as probably some other adjustments.
+    Rasterizes and labels LiDAR points, and optionally filters bounding boxes by LiDAR points.
+
+    If label is True, uses pre-determined labels in .laz file. If label is False and boxes is not
+    None, labels LiDAR points above the height threshold according to the box they fall into. If
+    label is False and boxes is None, labels all points above the height threshold with a single
+    label.
+
+    If boxes is not None and box_threshold > 0.0, filters boxes by removing boxes that have less
+    than `box_threshold` % of labeled LiDAR points falling within them.
 
     params:
         lidar_folder (str): Path to folder containing laz files
@@ -22,12 +28,14 @@ def rasterize_lidar(lidar_folder, rgb_folder, filename, label=False, boxes=None,
         filename (str): Lidar / tiff filename minus the extension
         label (bool): True if Lidar data already has "label" field with individual
                       tree labels
+        non_tree_label (str or int): Label used to identify non-tree Lidar points
+                                     if label==True, ignored otherwise
         boxes (np.array): T x 4 array of [x0,y0,x1,y1] bounding boxes, where T is the
                           total number of boxes (trees). If provided, used to label
                           Lidar points for individual trees.
+        height_threshold (float): Minimum height used to identify Lidar points as
+                                  trees (ignored if label==True)
         img_size (tuple): RGB image size in pixels (H x W)
-        min_threshold (int): Number of Lidar points that fall within a given pixel in
-                             order to add that pixel as a point prompt. Default is 1.
 
     returns:
         coord_array: 1 x P x 2 array of X,Y coordinates in pixel space, where P is the
@@ -43,54 +51,49 @@ def rasterize_lidar(lidar_folder, rgb_folder, filename, label=False, boxes=None,
     # LiDAR to DataFrame
     points = np.vstack((las.x, las.y, las.z)).transpose()
     df = pd.DataFrame(points, columns=['x', 'y', 'z'])
-
-    # If Lidar data has labels, add these to dataframe
-    if label:
-        df['label'] = las.label
-        num_trees = df['label'].max()
+    df['z'] = df['z'] > height_threshold
 
     # Align Lidar coordinates with tiff indices
     with rasterio.open(os.path.join(rgb_folder, filename+'.tif')) as rast_img:
         left, bottom, right, top = rast_img.bounds
-        df = df[df['x'].between(left, right) & df['y'].between(bottom, top)]        
+        df = df[df['x'].between(left, right) & df['y'].between(bottom, top)]
+        crop_idx = df.index
+        # Get pixel coordinates for each point.
         pixels = [rast_img.index(x,y) for x,y in zip(df['x'], df['y'])]
-        # Points on right-most and bottom-most edges of the image are recorded at index 400, should be 399
-        df['x_bin'] = [pixel[1] if pixel[1]!=400 else 399 for pixel in pixels]
-        df['y_bin'] = [pixel[0] if pixel[0]!=400 else 399 for pixel in pixels]
-        df = df.astype({'x_bin':'int', 'y_bin':'int'})
+    df[['y_bin','x_bin']] = pixels
+    df = df.astype({'x_bin':'int', 'y_bin':'int', 'z':'int'})
+    # Re-index points on the right-most and bottom-most edges of the image
+    df[['x_bin','y_bin']] = df[['x_bin','y_bin']].clip([0,0],[img_size[1]-1,img_size[0]-1])
 
-    # Already added label above, but this if statement allows elif and else statements below to work
+    # If Lidar points provided in laz file, use these labels
     if label:
-        pass
+        df['label'] = las.label[crop_idx]
+        tree_labels = [l for l in df['label'].unique() if l != non_tree_label]
+        df = df.groupby(by=['x_bin','y_bin'])['label'].unique().reset_index()
+        coord_array = df[['x_bin','y_bin']].to_numpy()[np.newaxis,:]
+        label_array = np.zeros((len(tree_labels), coord_array.shape[1]), dtype='int')
+        df = df.explode('label')
+        for i, tree in enumerate(tree_labels):
+            idx = df[df['label']==tree].index
+            label_array[i, idx] = 1
 
     # Otherwise, if boxes provided, use these to label Lidar data
     elif boxes is not None:
-        num_trees = len(boxes)
-        df['label'] = 0
+        df = df.groupby(by=['x_bin','y_bin'])['z'].max()
+        coord_array = df.reset_index()[['x_bin','y_bin']].to_numpy()[np.newaxis,:]
+        label_array = np.zeros((len(boxes), coord_array.shape[1]), dtype='int')
         for i, box in enumerate(boxes):
+            s = pd.Series(data=0, index=df.index)
             xmin, xmax = box[0], box[2]
             ymin, ymax = box[1], box[3]
-            df.loc[df['x_bin'].between(xmin, xmax) & df['y_bin'].between(ymin, ymax) & df['z'].gt(2), 'label'] = i+1
+            s.loc[xmin:xmax, ymin:ymax] = df.loc[xmin:xmax, ymin:ymax]
+            label_array[i] = s
 
-    # Otherwise use a height threshold to label all points above 2 meters as "1" for "tree"
+    # Otherwise use a height threshold to label all points above height_threshold as "1" for "tree"
     else:
-        df['label'] = 0
-        df.loc[df['z']>2, 'label'] = 1
-        num_trees = 1
-
-    # Record the number of LiDAR points in each grid space (count) and the highest label (max)
-    grid_labels = df.groupby(['x_bin', 'y_bin'])['label'].agg(['max','count']).reset_index()
-
-    # use min_threshold to select valid points
-    valid_points = grid_labels[grid_labels['count'] >= min_threshold]
-
-    # 1 x N x 2
-    coord_array = valid_points[['x_bin', 'y_bin']].to_numpy()[np.newaxis,:]
-    # Create an array for each tree, with ones for that tree and zeros elsewhere, then stack together.
-    # Assign based on the highest label (max)
-    label_array = np.zeros((num_trees, len(valid_points)), dtype=int)
-    for tree_id in range(1, num_trees + 1):
-        label_array[tree_id - 1] = (valid_points['max'] == tree_id).astype(int).to_numpy()
+        df = df.groupby(by=['x_bin','y_bin'])['z'].max().reset_index()
+        coord_array = df[['x_bin','y_bin']].to_numpy()[np.newaxis,:]
+        label_array = df['z'].to_numpy(dtype='int')[np.newaxis,:]
 
     return coord_array, label_array
 
@@ -443,3 +446,30 @@ def show_as_points(img, detections, coordinates, labels, ax=None,
         else:
             plt.savefig(os.path.join(output_folder, 'lidar_points.png'))
     plt.show()
+
+
+def lidar_filter(boxes, coordinates, labels, threshold=0.2):
+    '''
+    params:
+      boxes (ndarray): N x 4 array of bounding boxes, where N is the number of boxes
+      coordinates (ndarray): 1 x P x 2 array of X,Y coordinates, where P is the number
+                             of points.
+      labels (ndarray): N x P array of binary labels, with 1 being a tree point inside the
+                        Nth box and 0 being a non-tree point inside or outside the box
+      threshold (float): Percent of points inside the box that should be marked as 1 or
+                         "tree" in order to keep the box and labels as legitimate
+
+    returns:
+      idx (ndarray): Indices for the remaining boxes and labels after filtering
+    '''
+    index = pd.MultiIndex.from_arrays([coordinates[0,:,0], coordinates[0,:,1]])
+    df = pd.DataFrame(data=labels.T, index=index)
+    idx = []
+    for i,box in enumerate(boxes):
+        xmin, xmax = box[0], box[2]
+        ymin, ymax = box[1], box[3]
+        box_points = df[i].loc[xmin:xmax, ymin:ymax]
+        if len(box_points) > 0 and box_points.sum() / len(box_points) > threshold:
+            idx.append(i)
+
+    return np.array(idx, dtype='int')
