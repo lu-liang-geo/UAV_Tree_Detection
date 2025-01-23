@@ -9,15 +9,14 @@ from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import euclidean_distances
 
 
-def rasterize_lidar(lidar_folder, rgb_folder, filename, label=False, non_tree_label=0,
-                    boxes=None, height_threshold=2, img_size=(400,400)):
+def rasterize_lidar(lidar_folder, rgb_folder, filename, label=False, boxes=None, 
+                    classifications={'Ground':0,'High Vegetation':1}, img_size=(400,400)):
     '''
     Rasterizes and labels LiDAR points, and optionally filters bounding boxes by LiDAR points.
 
     If label is True, uses pre-determined labels in .laz file. If label is False and boxes is not
-    None, labels LiDAR points above the height threshold according to the box they fall into. If
-    label is False and boxes is None, labels all points above the height threshold with a single
-    label.
+    None, labels LiDAR points with "Tree" classification (1) according to the box they fall into.
+    If label is False and boxes is None, label all points with "Tree" classification as single label.
 
     If boxes is not None and box_threshold > 0.0, filters boxes by removing boxes that have less
     than `box_threshold` % of labeled LiDAR points falling within them.
@@ -28,13 +27,12 @@ def rasterize_lidar(lidar_folder, rgb_folder, filename, label=False, non_tree_la
         filename (str): Lidar / tiff filename minus the extension
         label (bool): True if Lidar data already has "label" field with individual
                       tree labels
-        non_tree_label (str or int): Label used to identify non-tree Lidar points
-                                     if label==True, ignored otherwise
         boxes (np.array): T x 4 array of [x0,y0,x1,y1] bounding boxes, where T is the
                           total number of boxes (trees). If provided, used to label
                           Lidar points for individual trees.
-        height_threshold (float): Minimum height used to identify Lidar points as
-                                  trees (ignored if label==True)
+        classifications (dict): Dictionary of LiDAR classifications. Must include 
+                                "High Vegetation" as a key, and the corresponding
+                                integer label.
         img_size (tuple): RGB image size in pixels (H x W)
 
     returns:
@@ -49,9 +47,9 @@ def rasterize_lidar(lidar_folder, rgb_folder, filename, label=False, non_tree_la
     las = laspy.read(os.path.join(lidar_folder, f'{filename}.laz'))
 
     # LiDAR to DataFrame
-    points = np.vstack((las.x, las.y, las.z)).transpose()
-    df = pd.DataFrame(points, columns=['x', 'y', 'z'])
-    df['z'] = df['z'] > height_threshold
+    points = np.vstack((las.x, las.y, las.classification)).transpose()
+    df = pd.DataFrame(points, columns=['x', 'y', 'classification'])
+    df['classification'] = df['classification'] == classifications['High Vegetation']
 
     # Align Lidar coordinates with tiff indices
     with rasterio.open(os.path.join(rgb_folder, filename+'.tif')) as rast_img:
@@ -61,14 +59,14 @@ def rasterize_lidar(lidar_folder, rgb_folder, filename, label=False, non_tree_la
         # Get pixel coordinates for each point.
         pixels = [rast_img.index(x,y) for x,y in zip(df['x'], df['y'])]
     df[['y_bin','x_bin']] = pixels
-    df = df.astype({'x_bin':'int', 'y_bin':'int', 'z':'int'})
+    df = df.astype({'x_bin':'int', 'y_bin':'int', 'classification':'int'})
     # Re-index points on the right-most and bottom-most edges of the image
     df[['x_bin','y_bin']] = df[['x_bin','y_bin']].clip([0,0],[img_size[1]-1,img_size[0]-1])
 
     # If Lidar points provided in laz file, use these labels
     if label:
         df['label'] = las.label[crop_idx]
-        tree_labels = [l for l in df['label'].unique() if l != non_tree_label]
+        tree_labels = [l for l in df['label'].unique() if l != 0]
         df = df.groupby(by=['x_bin','y_bin'])['label'].unique().reset_index()
         coord_array = df[['x_bin','y_bin']].to_numpy()[np.newaxis,:]
         label_array = np.zeros((len(tree_labels), coord_array.shape[1]), dtype='int')
@@ -79,7 +77,7 @@ def rasterize_lidar(lidar_folder, rgb_folder, filename, label=False, non_tree_la
 
     # Otherwise, if boxes provided, use these to label Lidar data
     elif boxes is not None:
-        df = df.groupby(by=['x_bin','y_bin'])['z'].max()
+        df = df.groupby(by=['x_bin','y_bin'])['classification'].max()
         coord_array = df.reset_index()[['x_bin','y_bin']].to_numpy()[np.newaxis,:]
         label_array = np.zeros((len(boxes), coord_array.shape[1]), dtype='int')
         for i, box in enumerate(boxes):
@@ -91,9 +89,9 @@ def rasterize_lidar(lidar_folder, rgb_folder, filename, label=False, non_tree_la
 
     # Otherwise use a height threshold to label all points above height_threshold as "1" for "tree"
     else:
-        df = df.groupby(by=['x_bin','y_bin'])['z'].max().reset_index()
+        df = df.groupby(by=['x_bin','y_bin'])['classification'].max().reset_index()
         coord_array = df[['x_bin','y_bin']].to_numpy()[np.newaxis,:]
-        label_array = df['z'].to_numpy(dtype='int')[np.newaxis,:]
+        label_array = df['classification'].to_numpy(dtype='int')[np.newaxis,:]
 
     return coord_array, label_array
 
