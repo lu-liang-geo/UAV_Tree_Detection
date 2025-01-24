@@ -303,13 +303,14 @@ def show_as_mask(img, detections, coordinates, labels, ax=None,
             mask_index = labels[i].nonzero()[0]
             mask_coords = coordinates[i, mask_index]
             pos_mask[i,mask_coords[:,1],mask_coords[:,0]] = True
-        detections.mask = pos_mask
-        # Set colors of masks depending on number of labels
-        if num_labels == 1:
-            pos_annotator = sv.MaskAnnotator(color=sv.Color.BLACK, opacity=1)
+        pos_detections = sv.Detections(xyxy=detections.xyxy, mask=pos_mask, class_id=detections.class_id)
+        # Originally if there were only one tree, its color would be black, but that was hard to see,
+        # so we changed it to red.
+        if len(pos_detections) == 1:
+          pos_annotator = sv.MaskAnnotator(color=sv.Color.RED, opacity=1)
         else:
-            pos_annotator = sv.MaskAnnotator(color_lookup=sv.ColorLookup.INDEX, opacity=1)
-        img = pos_annotator.annotate(scene=img.copy(), detections=detections)
+          pos_annotator = sv.MaskAnnotator(color_lookup=sv.ColorLookup.INDEX, opacity=1)
+        img = pos_annotator.annotate(scene=img.copy(), detections=pos_detections)
 
     if show_negative:
         # Show background points
@@ -320,10 +321,10 @@ def show_as_mask(img, detections, coordinates, labels, ax=None,
             mask_index = (labels[i]==0).nonzero()[0]
             mask_coords = coordinates[i, mask_index]
             neg_mask[i,mask_coords[:,1],mask_coords[:,0]] = True
-        detections.mask = neg_mask
         # Background points are always white for mask visualization
+        neg_detections = sv.Detections(xyxy=detections.xyxy, mask=neg_mask, class_id=detections.class_id)
         neg_annotator = sv.MaskAnnotator(color=sv.Color.WHITE, opacity=neg_opacity)
-        img = neg_annotator.annotate(scene=img.copy(), detections=detections)
+        img = neg_annotator.annotate(scene=img.copy(), detections=neg_detections)
 
     if show_boxes:
         # Show boxes
