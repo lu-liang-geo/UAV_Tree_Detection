@@ -40,6 +40,9 @@ def get_masks(filename, rgb_folder, shape_folder, img_size=(400,400)):
 
 
 def mask_iou_batch(masks_true, masks_pred):
+    '''
+    Calculate IoU between all pairs of two batches of masks, return matrix of IoUs.
+    '''
     intersection = np.logical_and(masks_true[:,None,...], masks_pred).sum(axis=(2,3))
     union = np.logical_or(masks_true[:,None,...], masks_pred).sum(axis=(2,3))
     iou_matrix = np.divide(intersection, union, out=np.zeros(union.shape), where=union!=0)
@@ -47,6 +50,9 @@ def mask_iou_batch(masks_true, masks_pred):
 
 
 def boxes_to_masks(boxes, shape):
+    '''
+    Convert bounding boxes to masks for purposes of computing IoU between boxes and masks.
+    '''
     masks = []
     for i, box in enumerate(boxes):
         masks.append(np.full(shape, False))
@@ -91,6 +97,19 @@ def hungarian_matching(truths, preds, threshold=0.0):
 
 
 def compute_iou(truths, preds, reduction='none'):
+    '''
+    Calculate IoU between matched masks, return all or average IoU.
+
+    params:
+        truths (ndarray): Numpy array of shape (T,H,W) for ground truth masks, where T is the number of identified trees, 
+                          H and W are the height and width of the image.
+        preds (ndarray): Numpy array of shape (T,H,W) for predicted masks, where T is the number of identified trees,
+                         H and W are the height and width of the image.
+        reduction (str): If 'none', return metrics for each tree, if "mean" return average metrics.
+    
+    return:
+        IoU (ndarray)
+    '''
     intersection = np.logical_and(truths, preds).sum(axis=(1,2))
     union = np.logical_or(truths, preds).sum(axis=(1,2))
     iou = np.divide(intersection, union, out=np.zeros(union.shape), where=union!=0)
@@ -106,10 +125,19 @@ def compute_iou(truths, preds, reduction='none'):
 
 
 def segmentation_metrics(truths, preds, reduction='none'):
-    precisions_per_tree = []
-    recalls_per_tree = []
-    f1_per_tree = []
+    '''
+    Calculate segmentation metrics between matched masks, return all or average.
 
+    params:
+        truths (ndarray): Numpy array of shape (T,H,W) for ground truth masks, where T is the number of identified trees, 
+                          H and W are the height and width of the image.
+        preds (ndarray): Numpy array of shape (T,H,W) for predicted masks, where T is the number of identified trees,
+                         H and W are the height and width of the image.
+        reduction (str): If 'none', return metrics for each tree, if "mean" return average metrics.
+    
+    return:
+        precision, recall, f1 (ndarrays)
+    '''
     tp = np.logical_and(truths, preds).sum(axis=(1,2))
     fp = np.logical_and(np.logical_not(truths), preds).sum(axis=(1,2))
     fn = np.logical_and(truths, np.logical_not(preds)).sum(axis=(1,2))
@@ -127,6 +155,19 @@ def segmentation_metrics(truths, preds, reduction='none'):
 
 
 def detection_metrics(truths, preds, threshold=0.5):
+    '''
+    Calculate detection metrics between matched masks above threshold.
+
+    params:
+        truths (ndarray): Numpy array of shape (T,H,W) for ground truth masks, where T is the number of identified trees, 
+                          H and W are the height and width of the image.
+        preds (ndarray): Numpy array of shape (T,H,W) for predicted masks, where T is the number of identified trees,
+                         H and W are the height and width of the image.
+        threshold (float): IoU threshold for prediction and ground truth to be considered a "True Positive"
+    
+    return:
+        precision, recall, f1 (ndarrays)
+    '''
     true_idx, pred_idx = hungarian_matching(truths, preds, threshold=threshold)
     tp = len(true_idx)
     fp = len(preds) - len(pred_idx)
@@ -137,3 +178,208 @@ def detection_metrics(truths, preds, threshold=0.5):
     f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
 
     return precision, recall, f1
+
+def per_tree_metrics(truths, preds, detection_threshold=0.5, segmentation_threshold=0.5):
+    '''
+    Calculate detection (object-based) and segmentation (pixel-based) metrics across all trees, optionally across multiple
+    images. This means if one image has 1 tree and another image has 10 trees, metrics are calculated across all 11 trees
+    rather than separately on the 1 tree and the 10 trees and then averaged together.
+
+    params:
+        truths (list): List of sv.Detections objects. Each Detections object includes the ground truth bounding boxes 
+                       and masks for a single image.
+        preds (list): List of sv.Detections objects. Each Detections object includes the prompt bounding boxes and
+                      predicted masks for a single image.
+        detection_threshold (float): Minimum IoU between predicted and ground truth masks to count as a True Positive
+                                     for detection metrics
+        segmentation_threshold (float): Minimum IoU between predicted and ground truth boxes to include a prediction in
+                                        the segmentation metrics
+    
+    return:
+        object-based precision, recall, and f1, pixel-based precision, recall, f1, and iou (tuple): Metrics across all trees.
+    '''
+    # List of ground truths and list of predictions should be same length (i.e. same number of images with
+    # ground truth labels and predicted labels)
+    assert len(truths) == len(preds)
+
+    detect_tp = []
+    detect_fp = []
+    detect_fn = []
+    segment_precision = []
+    segment_recall = []
+    segment_f1 = []
+    segment_iou = []
+
+    # Iterate thru each image
+    for i in range(len(truths)):
+        true_boxes = truths[i].xyxy
+        true_masks = truths[i].mask
+        pred_boxes = preds[i].xyxy
+        pred_masks = preds[i].mask
+
+        # Match ground truth and predicted masks for given image above detection_threshold
+        true_idx, pred_idx = hungarian_matching(true_masks, pred_masks, threshold=detection_threshold)
+
+        # Record detection (tree-wise) TP, FP, and FN
+        detect_tp.append(len(true_idx))
+        detect_fp.append(len(pred_boxes) - len(pred_idx))
+        detect_fn.append(len(true_boxes) - len(true_idx))
+
+        # Match ground truth and predicted boxes for given image above segmentation_threshold
+        # to select corresponding masks to run segmentation metrics on
+        segment_true_idx, segment_pred_idx = hungarian_matching(true_boxes, pred_boxes, threshold=segmentation_threshold)
+        true_masks = true_masks[segment_true_idx]
+        pred_masks = pred_masks[segment_pred_idx]
+
+        # Calculate segmentation (pixel-wise) TP, FP, and FN
+        segment_tp = np.logical_and(true_masks, pred_masks).sum(axis=(1,2))
+        segment_fp = np.logical_and(np.logical_not(true_masks), pred_masks).sum(axis=(1,2))
+        segment_fn = np.logical_and(true_masks, np.logical_not(pred_masks)).sum(axis=(1,2))
+
+        # Use pixel-wise TP, FP, and FN to calculate tree-wise segmentation metrics
+        precision = np.divide(segment_tp, (segment_tp+segment_fp), out=np.zeros(segment_tp.shape), where=(segment_tp+segment_fp)!=0)
+        recall = np.divide(segment_tp, (segment_tp+segment_fn), out=np.zeros(segment_tp.shape), where=(segment_tp+segment_fn)!=0)
+        f1 = np.divide((2*precision*recall), (precision+recall), out=np.zeros(recall.shape), where=(precision+recall)!=0)
+        iou = np.divide(segment_tp, (segment_tp+segment_fp+segment_fn), out=np.zeros(segment_tp.shape), where=(segment_tp+segment_fp+segment_fn)!=0)
+        segment_precision += list(precision)
+        segment_recall += list(recall)
+        segment_f1 += list(f1)
+        segment_iou += list(iou)
+
+    # Calculate detection precision, recall, and f1 for all trees across all images
+    detect_tp = sum(detect_tp)
+    detect_fp = sum(detect_fp)
+    detect_fn = sum(detect_fn)
+    detect_precision = detect_tp / (detect_tp + detect_fp) if (detect_tp + detect_fp) > 0 else 0
+    detect_recall = detect_tp / (detect_tp + detect_fn) if (detect_tp + detect_fn) > 0 else 0
+    detect_f1 = (2 * detect_precision * detect_recall) / (detect_precision + detect_recall) if (detect_precision + detect_recall) > 0 else 0
+
+    # Average segmentation precision, recall, f1, and IoU for all trees across all images
+    segment_precision = sum(segment_precision) / len(segment_precision) if len(segment_precision) > 0 else 0
+    segment_recall = sum(segment_recall) / len(segment_recall) if len(segment_recall) > 0 else 0
+    segment_f1 = sum(segment_f1) / len(segment_f1) if len(segment_f1) > 0 else 0
+    segment_iou = sum(segment_iou) / len(segment_iou) if len(segment_iou) > 0 else 0
+
+    return np.array([detect_precision, detect_recall, detect_f1,
+                     segment_precision, segment_recall, segment_f1, segment_iou])
+    
+
+def per_tree_std(truths, preds, segmentation_threshold=0.5):
+    '''
+    Calculate standartd deviation of segmentation (pixel-based) metrics across all trees, optionally across multiple
+    images. This means if one image has 1 tree and another image has 10 trees, metrics are calculated across all 11
+    trees rather than separately on the 1 tree and the 10 trees and then averaged together.
+
+    params:
+        truths (list): List of sv.Detections objects. Each Detections object includes the ground truth bounding boxes 
+                       and masks for a single image.
+        preds (list): List of sv.Detections objects. Each Detections object includes the prompt bounding boxes and
+                      predicted masks for a single image.
+        segmentation_threshold (float): Minimum IoU between predicted and ground truth boxes to include a prediction in
+                                        the segmentation metrics
+    
+    return:
+        pixel-based precision, recall, f1, and iou (tuple): Standard deviations of these metrics across all trees.
+    '''
+    segment_precision = []
+    segment_recall = []
+    segment_f1 = []
+    segment_iou = []
+
+    for i in range(len(truths)):
+        true_boxes = truths[i].xyxy
+        true_masks = truths[i].mask
+        pred_boxes = preds[i].xyxy
+        pred_masks = preds[i].mask
+
+        # Match ground truth and predicted boxes for given image above segmentation_threshold
+        # to select corresponding masks to run segmentation metrics on
+        segment_true_idx, segment_pred_idx = hungarian_matching(true_boxes, pred_boxes, threshold=segmentation_threshold)
+        true_masks = true_masks[segment_true_idx]
+        pred_masks = pred_masks[segment_pred_idx]
+
+        # Calculate segmentation (pixel-wise) TP, FP, and FN
+        segment_tp = np.logical_and(true_masks, pred_masks).sum(axis=(1,2))
+        segment_fp = np.logical_and(np.logical_not(true_masks), pred_masks).sum(axis=(1,2))
+        segment_fn = np.logical_and(true_masks, np.logical_not(pred_masks)).sum(axis=(1,2))
+
+        # Use pixel-wise TP, FP, and FN to calculate tree-wise segmentation metrics
+        precision = np.divide(segment_tp, (segment_tp+segment_fp), out=np.zeros(segment_tp.shape), where=(segment_tp+segment_fp)!=0)
+        recall = np.divide(segment_tp, (segment_tp+segment_fn), out=np.zeros(segment_tp.shape), where=(segment_tp+segment_fn)!=0)
+        f1 = np.divide((2*precision*recall), (precision+recall), out=np.zeros(recall.shape), where=(precision+recall)!=0)
+        iou = np.divide(segment_tp, (segment_tp+segment_fp+segment_fn), out=np.zeros(segment_tp.shape), where=(segment_tp+segment_fp+segment_fn)!=0)
+        segment_precision += list(precision)
+        segment_recall += list(recall)
+        segment_f1 += list(f1)
+        segment_iou += list(iou)
+
+    return np.std(segment_precision), np.std(segment_recall), np.std(segment_f1), np.std(segment_iou)
+
+
+def box_mask_metrics(truths, preds, detection_threshold=0.5, segmentation_threshold=0.5):
+    '''
+    Calculate object-based metrics for both bounding boxes and masks. Used for an experiment in the
+    paper comparing both.
+
+    params:
+        truths (list): List of sv.Detections objects. Each Detections object includes the ground truth
+                    bounding boxes and masks for a single image.
+        preds (list): List of sv.Detections objects. Each Detections object includes the predicted
+                    bounding boxes and masks for a single image.
+        detection_threshold (float): Minimum IoU between predicted and ground truth masks to count
+                                    as a True Positive for detection metrics
+        segmentation_threshold (float): Minimum IoU between predicted and ground truth boxes to include
+                                        a prediction in the segmentation metrics
+    returns:
+        bounding box precision, recall, and f1, mask precision, recall, and f1 (tuple)
+    '''
+    # List of ground truths and list of predictions should be same length (i.e. same number of images with
+    # ground truth labels and predicted labels)
+    assert len(truths) == len(preds)
+
+    box_tp, box_fp, box_fn = [],[],[]
+    mask_tp, mask_fp, mask_fn = [],[],[]
+
+    # Iterate thru each image
+    for i in range(len(truths)):
+        true_boxes = truths[i].xyxy
+        true_masks = truths[i].mask
+        pred_boxes = preds[i].xyxy
+        pred_masks = preds[i].mask
+
+        # Match ground truth and predicted boxes for given image above detection_threshold
+        true_idx, box_idx = hungarian_matching(true_boxes, pred_boxes, threshold=detection_threshold)
+
+        # Record box (tree-wise) TP, FP, and FN
+        box_tp.append(len(true_idx))
+        box_fp.append(len(pred_boxes) - len(box_idx))
+        box_fn.append(len(true_boxes) - len(true_idx))
+
+        # Match ground truth and predicted masks for given image above detection_threshold
+        true_idx, mask_idx = hungarian_matching(true_masks, pred_masks, threshold=detection_threshold)
+
+        # Record mask (tree-wise) TP, FP, and FN
+        mask_tp.append(len(true_idx))
+        mask_fp.append(len(pred_masks) - len(mask_idx))
+        mask_fn.append(len(true_masks) - len(true_idx))
+
+    # Calculate box and mask precision, recall, and f1 for all trees across all images
+    box_tp = sum(box_tp)
+    box_fp = sum(box_fp)
+    box_fn = sum(box_fn)
+
+    mask_tp = sum(mask_tp)
+    mask_fp = sum(mask_fp)
+    mask_fn = sum(mask_fn)   
+
+    box_precision = box_tp / (box_tp + box_fp) if (box_tp + box_fp) > 0 else 0
+    box_recall = box_tp / (box_tp + box_fn) if (box_tp + box_fn) > 0 else 0
+    box_f1 = (2 * box_precision * box_recall) / (box_precision + box_recall) if (box_precision + box_recall) > 0 else 0
+
+    mask_precision = mask_tp / (mask_tp + mask_fp) if (mask_tp + mask_fp) > 0 else 0
+    mask_recall = mask_tp / (mask_tp + mask_fn) if (mask_tp + mask_fn) > 0 else 0
+    mask_f1 = (2 * mask_precision * mask_recall) / (mask_precision + mask_recall) if (mask_precision + mask_recall) > 0 else 0
+ 
+
+    return np.array([box_precision, box_recall, box_f1,
+                     mask_precision, mask_recall, mask_f1])
