@@ -96,6 +96,96 @@ def rasterize_lidar(lidar_folder, rgb_folder, filename, label=False, boxes=None,
     return coord_array, label_array
 
 
+def rasterize_lidar_height(lidar_folder, rgb_folder, filename, label=False, non_tree_label=0,
+                           boxes=None, height_threshold=2, img_size=(400,400)):
+    '''
+    Rasterizes and labels LiDAR points by height threshold, and optionally filters bounding boxes by 
+    LiDAR points. Old version of rasterize_lidar method.
+
+    If label is True, uses pre-determined labels in .laz file. If label is False and boxes is not
+    None, labels LiDAR points above the height threshold according to the box they fall into. If
+    label is False and boxes is None, labels all points above the height threshold with a single
+    label.
+
+    If boxes is not None and box_threshold > 0.0, filters boxes by removing boxes that have less
+    than `box_threshold` % of labeled LiDAR points falling within them.
+
+    params:
+        lidar_folder (str): Path to folder containing laz files
+        rgb_folder (str): Path to folder containing tiff files
+        filename (str): Lidar / tiff filename minus the extension
+        label (bool): True if Lidar data already has "label" field with individual
+                      tree labels
+        non_tree_label (str or int): Label used to identify non-tree Lidar points
+                                     if label==True, ignored otherwise
+        boxes (np.array): T x 4 array of [x0,y0,x1,y1] bounding boxes, where T is the
+                          total number of boxes (trees). If provided, used to label
+                          Lidar points for individual trees.
+        height_threshold (float): Minimum height used to identify Lidar points as
+                                  trees (ignored if label==True)
+        img_size (tuple): RGB image size in pixels (H x W)
+
+    returns:
+        coord_array: 1 x P x 2 array of X,Y coordinates in pixel space, where P is the
+                     number of rasterized points
+        label_array: N x P array of 1s and 0s, 1 to indicate the corresponding entry in
+                     coord_array is a specific tree, 0 to indicate background or a different
+                     tree. If using common label for all trees, N is 1.
+    '''
+
+    # Read Lidar file
+    las = laspy.read(os.path.join(lidar_folder, f'{filename}.laz'))
+
+    # LiDAR to DataFrame
+    points = np.vstack((las.x, las.y, las.z)).transpose()
+    df = pd.DataFrame(points, columns=['x', 'y', 'z'])
+    df['z'] = df['z'] > height_threshold
+
+    # Align Lidar coordinates with tiff indices
+    with rasterio.open(os.path.join(rgb_folder, filename+'.tif')) as rast_img:
+        left, bottom, right, top = rast_img.bounds
+        df = df[df['x'].between(left, right) & df['y'].between(bottom, top)]
+        crop_idx = df.index
+        # Get pixel coordinates for each point.
+        pixels = [rast_img.index(x,y) for x,y in zip(df['x'], df['y'])]
+    df[['y_bin','x_bin']] = pixels
+    df = df.astype({'x_bin':'int', 'y_bin':'int', 'z':'int'})
+    # Re-index points on the right-most and bottom-most edges of the image
+    df[['x_bin','y_bin']] = df[['x_bin','y_bin']].clip([0,0],[img_size[1]-1,img_size[0]-1])
+
+    # If Lidar points provided in laz file, use these labels
+    if label:
+        df['label'] = las.label[crop_idx]
+        tree_labels = [l for l in df['label'].unique() if l != non_tree_label]
+        df = df.groupby(by=['x_bin','y_bin'])['label'].unique().reset_index()
+        coord_array = df[['x_bin','y_bin']].to_numpy()[np.newaxis,:]
+        label_array = np.zeros((len(tree_labels), coord_array.shape[1]), dtype='int')
+        df = df.explode('label')
+        for i, tree in enumerate(tree_labels):
+            idx = df[df['label']==tree].index
+            label_array[i, idx] = 1
+
+    # Otherwise, if boxes provided, use these to label Lidar data
+    elif boxes is not None:
+        df = df.groupby(by=['x_bin','y_bin'])['z'].max()
+        coord_array = df.reset_index()[['x_bin','y_bin']].to_numpy()[np.newaxis,:]
+        label_array = np.zeros((len(boxes), coord_array.shape[1]), dtype='int')
+        for i, box in enumerate(boxes):
+            s = pd.Series(data=0, index=df.index)
+            xmin, xmax = box[0], box[2]
+            ymin, ymax = box[1], box[3]
+            s.loc[xmin:xmax, ymin:ymax] = df.loc[xmin:xmax, ymin:ymax]
+            label_array[i] = s
+
+    # Otherwise use a height threshold to label all points above height_threshold as "1" for "tree"
+    else:
+        df = df.groupby(by=['x_bin','y_bin'])['z'].max().reset_index()
+        coord_array = df[['x_bin','y_bin']].to_numpy()[np.newaxis,:]
+        label_array = df['z'].to_numpy(dtype='int')[np.newaxis,:]
+
+    return coord_array, label_array
+
+
 def kmeans_cluster(coordinates, labels, num_clusters, seed=None):
     '''
     Use KMeans clustering to group (rasterized) LiDAR points collectively labeled as "tree"
