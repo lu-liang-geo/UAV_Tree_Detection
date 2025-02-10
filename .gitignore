@@ -43,3 +43,5 @@ package-lock.json
 
 # DS_Store
 **.DS_Store
+segment_and_detect_anything/utils/compare1.py
+segment_and_detect_anything/utils/compare2.py
