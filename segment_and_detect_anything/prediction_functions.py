@@ -1,22 +1,22 @@
 import numpy as np
 
-def segment_boxes(sam_predictor, boxes, threshold=0.0) -> np.ndarray:
+def segment_boxes(sam_predictor, boxes) -> np.ndarray:
     result_mask = []
+    confidence_score = []
     for box in boxes:
         mask, scores, logits = sam_predictor.predict(
             box=box,
             multimask_output=False
         )
-        if scores > threshold:
-            result_mask.append(mask.astype('bool'))
+        result_mask.append(mask.astype('bool'))
+        confidence_score.append(scores)
 
-    if len(result_mask) > 0:
-        return np.concatenate(result_mask)
-    else:
-        return np.empty(shape=(0, mask.shape[0], mask.shape[1]))
+    return np.concatenate(result_mask), np.concatenate(confidence_score)
 
-def segment_points(sam_predictor, points, labels, threshold=0.0, iterative=True, return_iterations=False):
+
+def segment_points(sam_predictor, points, labels, iterative=True, return_iterations=False):
     result_mask = []
+    confidence_score = []
     for i, label in enumerate(labels):
         # If there is only one set of coordinates (i.e. points.shape[0]==1),
         # always use those same coordinates. If there are multiple sets of
@@ -49,18 +49,18 @@ def segment_points(sam_predictor, points, labels, threshold=0.0, iterative=True,
                     multimask_output=False)
                 if return_iterations:
                     result_mask.append(mask.astype('bool'))
+                    confidence_score.append(scores)
 
         if not return_iterations:
-            if scores > threshold:
-                result_mask.append(mask.astype('bool'))
+            result_mask.append(mask.astype('bool'))
+            confidence_score.append(scores)
 
-    if len(result_mask) > 0:
-        return np.concatenate(result_mask)
-    else:
-        return np.empty(shape=(0, mask.shape[0], mask.shape[1]))
+    return np.concatenate(result_mask), np.concatenate(confidence_score)
 
-def segment_box_points(sam_predictor, boxes, points, labels, threshold=0.0, iterative=True, return_iterations=False):
+
+def segment_box_points(sam_predictor, boxes, points, labels, iterative=True, return_iterations=False):
     result_mask = []
+    confidence_score = []
     for i, box in enumerate(boxes):
         tree_points = points[i]
         tree_labels = labels[i]
@@ -79,6 +79,7 @@ def segment_box_points(sam_predictor, boxes, points, labels, threshold=0.0, iter
                 multimask_output=False)
             if return_iterations:
                 result_mask.append(mask.astype('bool'))
+                confidence_score.append(scores)
             # Subsequent Predictions using box, new points, and previous mask
             for j in range(len(tree_labels)):
                 mask, scores, logits = sam_predictor.predict(
@@ -89,12 +90,10 @@ def segment_box_points(sam_predictor, boxes, points, labels, threshold=0.0, iter
                     multimask_output=False)
                 if return_iterations:
                     result_mask.append(mask.astype('bool'))
+                    confidence_score.append(scores)
 
         if not return_iterations:
-            if scores > threshold:
-                result_mask.append(mask.astype('bool'))
+            result_mask.append(mask.astype('bool'))
+            confidence_score.append(scores)
 
-    if len(result_mask) > 0:
-        return np.concatenate(result_mask)
-    else:
-        return np.empty(shape=(0, mask.shape[0], mask.shape[1]))
+    return np.concatenate(result_mask), np.concatenate(confidence_score)
