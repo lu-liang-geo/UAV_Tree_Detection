@@ -281,6 +281,10 @@ def per_tree_std(truths, preds, segmentation_threshold=0.5):
     return:
         pixel-based precision, recall, f1, and iou (tuple): Standard deviations of these metrics across all trees.
     '''
+    # List of ground truths and list of predictions should be same length (i.e. same number of images with
+    # ground truth labels and predicted labels)
+    assert len(truths) == len(preds)
+    
     segment_precision = []
     segment_recall = []
     segment_f1 = []
